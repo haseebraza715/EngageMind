@@ -65,12 +65,12 @@ export default function LoginPage() {
               Unlock the power of <br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-white via-white/90 to-white/70">Intelligent AI</span>
             </h1>
-            <p className="text-lg text-neutral-400 max-w-md">
+            <p className="text-lg text-neutral-200 max-w-md">
               Join thousands of developers and professionals who use EngageMind to accelerate their workflow and unlock creativity.
             </p>
           </div>
 
-          <div className="flex gap-4 text-sm text-neutral-500">
+          <div className="flex gap-4 text-sm text-neutral-300">
             <span>© {new Date().getFullYear()} EngageMind AI</span>
             <span>Privacy Policy</span>
             <span>Terms</span>

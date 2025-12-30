@@ -84,12 +84,12 @@ export default function RegisterPage() {
               Join the future of <br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-white via-white/90 to-white/70">AI Communication</span>
             </h1>
-            <p className="text-lg text-neutral-400 max-w-md">
+            <p className="text-lg text-neutral-200 max-w-md">
               Create an account today and start building smarter, context-aware conversational experiences.
             </p>
           </div>
 
-          <div className="flex gap-4 text-sm text-neutral-500">
+          <div className="flex gap-4 text-sm text-neutral-300">
             <span>© {new Date().getFullYear()} EngageMind AI</span>
             <span>Privacy Policy</span>
             <span>Terms</span>
