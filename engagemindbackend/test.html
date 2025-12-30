@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Full Auth Testing</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    form {
+      background: #f5f5f5;
+      padding: 20px;
+      border-radius: 5px;
+      margin-bottom: 20px;
+    }
+    input, button {
+      display: block;
+      margin-bottom: 10px;
+    }
+    input {
+      padding: 8px;
+      width: 100%;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    button {
+      background: #4CAF50;
+      color: white;
+      padding: 10px 15px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    pre {
+      background: #f8f8f8;
+      padding: 15px;
+      border-radius: 5px;
+      overflow-x: auto;
+    }
+    h2 {
+      margin-top: 40px;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>Backend Auth Testing</h1>
+
+  <!-- REGISTER -->
+  <h2>Register</h2>
+  <form id="registerForm">
+    <label>Username:</label>
+    <input type="text" id="regUsername" required>
+
+    <label>Email:</label>
+    <input type="email" id="regEmail" required>
+
+    <label>Password:</label>
+    <input type="password" id="regPassword" required>
+
+    <button type="submit">Register</button>
+  </form>
+
+  <!-- LOGIN -->
+  <h2>Login</h2>
+  <form id="loginForm">
+    <label>Email or Username:</label>
+    <input type="text" id="loginEmailOrUsername" required>
+
+    <label>Password:</label>
+    <input type="password" id="loginPassword" required>
+
+    <button type="submit">Login</button>
+  </form>
+
+  <!-- FORGOT PASSWORD -->
+  <h2>Forgot Password</h2>
+  <form id="forgotForm">
+    <label>Enter your email to reset password:</label>
+    <input type="email" id="forgotEmail" required>
+    <button type="submit">Send Reset Link</button>
+  </form>
+
+  <!-- RESET PASSWORD -->
+  <h2>Reset Password</h2>
+  <form id="resetForm">
+    <label>Reset Token:</label>
+    <input type="text" id="resetToken" placeholder="Paste token from email link" required>
+
+    <label>New Password:</label>
+    <input type="password" id="newPassword" required>
+
+    <button type="submit">Reset Password</button>
+  </form>
+
+  <!-- EMAIL VERIFICATION -->
+  <h2>Verify Email</h2>
+  <form id="verifyForm">
+    <label>Verification Token (from the emailed link):</label>
+    <input type="text" id="verifyToken" placeholder="Paste ?token=..." required>
+
+    <button type="submit">Verify Email</button>
+  </form>
+
+  <!-- PROTECTED ROUTE -->
+  <h2>Protected Route</h2>
+  <p>(Requires a valid JWT from <strong>Login</strong>)</p>
+  <button id="protectedBtn">Test Protected Route</button>
+
+  <!-- ADMIN ROUTE -->
+  <h2>Admin-Only Route</h2>
+  <p>(Requires a valid JWT from an <strong>admin</strong> user)</p>
+  <button id="adminBtn">Test Admin Route</button>
+
+  <!-- RESPONSE OUTPUT -->
+  <h2>Response:</h2>
+  <pre id="responseOutput">Results will appear here...</pre>
+
+  <script>
+    let currentToken = null; // We'll store the JWT from /login
+    const responseOutput = document.getElementById('responseOutput');
+
+    // Helper function to display output
+    function showResponse(data) {
+      responseOutput.textContent = JSON.stringify(data, null, 2);
+    }
+
+    // REGISTER
+    document.getElementById('registerForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      responseOutput.textContent = 'Registering...';
+
+      const username = document.getElementById('regUsername').value;
+      const email = document.getElementById('regEmail').value;
+      const password = document.getElementById('regPassword').value;
+
+      try {
+        const res = await fetch('http://localhost:5000/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, email, password }),
+        });
+        const data = await res.json();
+        showResponse(data);
+      } catch (error) {
+        responseOutput.textContent = 'Error: ' + error.message;
+      }
+    });
+
+    // LOGIN
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      responseOutput.textContent = 'Logging in...';
+
+      const emailOrUsername = document.getElementById('loginEmailOrUsername').value;
+      const password = document.getElementById('loginPassword').value;
+
+      try {
+        const res = await fetch('http://localhost:5000/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ emailOrUsername, password }),
+        });
+        const data = await res.json();
+        showResponse(data);
+
+        // If login succeeded, store the token
+        if (data.token) {
+          currentToken = data.token;
+        }
+      } catch (error) {
+        responseOutput.textContent = 'Error: ' + error.message;
+      }
+    });
+
+    // FORGOT PASSWORD
+    document.getElementById('forgotForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      responseOutput.textContent = 'Sending forgot password request...';
+
+      const email = document.getElementById('forgotEmail').value;
+
+      try {
+        const res = await fetch('http://localhost:5000/auth/forgot-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email }),
+        });
+        const data = await res.json();
+        showResponse(data);
+      } catch (error) {
+        responseOutput.textContent = 'Error: ' + error.message;
+      }
+    });
+
+    // RESET PASSWORD
+    document.getElementById('resetForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      responseOutput.textContent = 'Resetting password...';
+
+      const token = document.getElementById('resetToken').value;
+      const newPassword = document.getElementById('newPassword').value;
+
+      try {
+        const res = await fetch('http://localhost:5000/auth/reset-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token, newPassword }),
+        });
+        const data = await res.json();
+        showResponse(data);
+      } catch (error) {
+        responseOutput.textContent = 'Error: ' + error.message;
+      }
+    });
+
+    // VERIFY EMAIL
+    document.getElementById('verifyForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      responseOutput.textContent = 'Verifying email...';
+
+      const token = document.getElementById('verifyToken').value;
+
+      try {
+        // We do a GET request with ?token=...
+        // e.g. /auth/verify-email?token=abc123
+        const res = await fetch(`http://localhost:5000/auth/verify-email?token=${token}`, {
+          method: 'GET'
+        });
+        // Possibly a redirect or JSON. We'll attempt JSON parse:
+        const data = await res.json();
+        showResponse(data);
+      } catch (error) {
+        responseOutput.textContent = 'Error: ' + error.message;
+      }
+    });
+
+    // PROTECTED ROUTE (Needs currentToken)
+    document.getElementById('protectedBtn').addEventListener('click', async () => {
+      if (!currentToken) {
+        responseOutput.textContent = 'You must log in first to get a token!';
+        return;
+      }
+      responseOutput.textContent = 'Testing protected route...';
+
+      try {
+        // This route typically is GET /admin/protected if you set it up
+        // Adjust the URL if needed (some prefer /protected with no /admin prefix)
+        const res = await fetch('http://localhost:5000/admin/protected', {
+          method: 'GET',
+          headers: {
+            'Authorization': 'Bearer ' + currentToken
+          }
+        });
+        const data = await res.json();
+        showResponse(data);
+      } catch (error) {
+        responseOutput.textContent = 'Error: ' + error.message;
+      }
+    });
+
+    // ADMIN ROUTE (Needs currentToken as well)
+    document.getElementById('adminBtn').addEventListener('click', async () => {
+      if (!currentToken) {
+        responseOutput.textContent = 'You must log in first to get a token!';
+        return;
+      }
+      responseOutput.textContent = 'Testing admin route...';
+
+      try {
+        // If your route is GET /admin/admin-data:
+        const res = await fetch('http://localhost:5000/admin/admin-data', {
+          method: 'GET',
+          headers: {
+            'Authorization': 'Bearer ' + currentToken
+          }
+        });
+        const data = await res.json();
+        showResponse(data);
+      } catch (error) {
+        responseOutput.textContent = 'Error: ' + error.message;
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+venv/
+env/
+
+# Environment Variables
+.env
+.env.bak
+.env.local
+
+# Application Data & Logs
+logs/
+faiss_index_dir/
+.pytest_cache/
+data/
+ingestion/
+test/
+
+# System
+.DS_Store

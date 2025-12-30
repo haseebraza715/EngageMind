@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EngageMind's RAG Interface</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="stars"></div>
+
+  <div class="main-container">
+    <div class="app-header">
+      <h1>EngageMind RAG Interface</h1>
+      <p>Retrieve, Analyze, and Generate knowledge with AI-powered document understanding</p>
+    </div>
+
+    <div class="grid-container">
+      <!-- Ask a Question Card -->
+      <div class="card">
+        <div class="card-header">
+          <h2>Knowledge Query</h2>
+          <p>Ask questions about the uploaded documents</p>
+        </div>
+        <div class="input-section">
+          <textarea id="question" placeholder="e.g. Summarize the main findings of the new report"></textarea>
+          <div class="actions">
+            <button id="ask-button">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="22" y1="2" x2="11" y2="13"></line>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+              </svg>
+              Submit Query
+            </button>
+            <div class="spinner" id="loading-spinner"></div>
+          </div>
+          <div class="message" id="message-area"></div>
+          <div class="answer-section">
+            <div class="answer" id="answer-box"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- File Upload Card -->
+      <div class="card">
+        <div class="card-header">
+          <h2>Document Upload</h2>
+          <p>Add text documents to the knowledge base</p>
+        </div>
+        <div class="input-section">
+          <div class="file-input-wrapper">
+            <input type="file" id="fileInput" accept=".txt,.pdf,.docx,.md" multiple />
+            <label for="fileInput" class="file-input-label">
+              <span>Drag & drop files or click to browse</span>
+              <small>Supports .txt, .pdf, .docx and .md files (max 10MB each)</small>
+            </label>
+          </div>
+          <div id="filename-display" class="filename-display"></div>
+          <div class="actions">
+            <button id="upload-button">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="17 8 12 3 7 8"></polyline>
+                <line x1="12" y1="3" x2="12" y2="15"></line>
+              </svg>
+              Upload Documents
+            </button>
+            <div class="spinner" id="upload-spinner"></div>
+          </div>
+          <div class="message" id="upload-message"></div>
+
+          <div class="answer-section">
+            <div class="answer" id="upload-status">
+              <p style="align-items: center;  margin-bottom: 10px; color: #a1a1a1;">
+                Uploaded documents will be processed and added to the knowledge base. You can then query their contents.
+              </p>
+              <ul id="document-list"></ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="footer-content">
+      EngageMind RAG Interface &copy; <span id="current-year"></span> | AI-Powered Document Analysis
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
