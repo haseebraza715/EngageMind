@@ -6,6 +6,8 @@ import {
   createConversation,
   fetchConversations,
   deleteConversation,
+  fetchFineTuneStatus,
+  startFineTuneTraining,
 } from "./chatApi";
 import { FiMenu, FiMessageSquare, FiTrendingUp, FiCpu } from "react-icons/fi";
 import { toast } from "react-toastify";
@@ -19,6 +21,10 @@ export default function ChatContainer({ userData }) {
   const [loading, setLoading] = useState(true);
   const [showUploader, setShowUploader] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
+  const [trainingTaskId, setTrainingTaskId] = useState(null);
+  const [trainingStatus, setTrainingStatus] = useState('IDLE');
+  const [trainingMessage, setTrainingMessage] = useState('No training task has been started yet.');
+  const [trainingActionLoading, setTrainingActionLoading] = useState(false);
 
   useEffect(() => {
     const loadConversations = async () => {
@@ -131,6 +137,77 @@ export default function ChatContainer({ userData }) {
     }
   };
 
+  const handleStartTraining = async () => {
+    if (trainingActionLoading || ['PENDING', 'PROGRESS'].includes(trainingStatus)) {
+      return;
+    }
+
+    try {
+      setTrainingActionLoading(true);
+      const data = await startFineTuneTraining();
+      const nextStatus = (data.status || data.state || 'PENDING').toUpperCase();
+
+      setTrainingTaskId(data.task_id || null);
+      setTrainingStatus(nextStatus);
+      setTrainingMessage(data.message || 'Fine-tuning task queued.');
+      toast.info(data.message || 'Fine-tuning task queued.');
+    } catch (error) {
+      setTrainingStatus('FAILURE');
+      setTrainingMessage(error.message || 'Failed to start fine-tuning.');
+      toast.error(error.message || 'Failed to start fine-tuning.');
+    } finally {
+      setTrainingActionLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!trainingTaskId || !['PENDING', 'PROGRESS'].includes(trainingStatus)) {
+      return undefined;
+    }
+
+    let active = true;
+
+    const pollStatus = async () => {
+      try {
+        const data = await fetchFineTuneStatus(trainingTaskId);
+        if (!active) {
+          return;
+        }
+
+        const nextStatus = (data.status || data.state || 'PENDING').toUpperCase();
+        setTrainingStatus(nextStatus);
+        setTrainingMessage((prev) => data.message || prev);
+
+        if (nextStatus === 'SUCCESS') {
+          toast.success('GPT-2 fine-tuning completed successfully.');
+          setTrainingTaskId(null);
+          return;
+        }
+
+        if (nextStatus === 'FAILURE') {
+          toast.error(data.message || 'Fine-tuning failed.');
+          setTrainingTaskId(null);
+        }
+      } catch (error) {
+        if (!active) {
+          return;
+        }
+        setTrainingStatus('FAILURE');
+        setTrainingMessage(error.message || 'Unable to poll training status.');
+        setTrainingTaskId(null);
+      }
+    };
+
+    pollStatus();
+    const intervalId = setInterval(pollStatus, 4000);
+
+    return () => {
+      active = false;
+      clearInterval(intervalId);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trainingTaskId, trainingStatus]);
+
   return (
     <div className="flex h-full w-full relative">
 
@@ -165,6 +242,10 @@ export default function ChatContainer({ userData }) {
           loading={loading}
           onRefreshConversations={handleRefreshConversations}
           userData={userData}
+          onStartTraining={handleStartTraining}
+          trainingStatus={trainingStatus}
+          trainingMessage={trainingMessage}
+          trainingActionLoading={trainingActionLoading}
         />
       </motion.div>
 

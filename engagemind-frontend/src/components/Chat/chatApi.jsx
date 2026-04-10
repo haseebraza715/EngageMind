@@ -1,4 +1,5 @@
-import axiosChat from '../../api/axiosChat'; 
+import axiosChat from '../../api/axiosChat';
+import axiosFineTune from '../../api/axiosFineTune';
 
 export async function fetchConversations() {
   try {
@@ -121,5 +122,37 @@ export async function deleteConversation(conversationId) {
     }
     
     throw new Error(error.response?.data?.message || 'Failed to delete conversation');
+  }
+}
+
+export async function startFineTuneTraining() {
+  try {
+    const response = await axiosFineTune.post('/api/fine-tune', {});
+    return response.data;
+  } catch (error) {
+    console.error('Error starting fine-tuning:', error);
+
+    if (error.response?.status === 401) {
+      window.location.href = '/login';
+      throw new Error('Authentication required. Please log in to start training.');
+    }
+
+    throw new Error(error.response?.data?.message || 'Failed to start training');
+  }
+}
+
+export async function fetchFineTuneStatus(taskId) {
+  try {
+    const response = await axiosFineTune.get(`/api/fine-tune/status/${taskId}`);
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching fine-tune status:', error);
+
+    if (error.response?.status === 401) {
+      window.location.href = '/login';
+      throw new Error('Authentication required. Please log in to check training status.');
+    }
+
+    throw new Error(error.response?.data?.message || 'Failed to fetch training status');
   }
 }

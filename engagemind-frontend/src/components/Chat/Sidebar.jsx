@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 
-import { FiPlus, FiTrash2, FiMessageSquare, FiSearch } from 'react-icons/fi';
+import { FiPlus, FiTrash2, FiMessageSquare, FiSearch, FiCpu } from 'react-icons/fi';
 import Button from '../UI/Button';
 import Input from '../UI/Input';
 import { cn } from '../../lib/utils';
@@ -14,6 +14,10 @@ export default function Sidebar({
   onDeleteConversation,
   loading,
   userData,
+  onStartTraining,
+  trainingStatus = 'IDLE',
+  trainingMessage = 'No training task has been started yet.',
+  trainingActionLoading = false,
 }) {
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -52,6 +56,15 @@ export default function Sidebar({
     return groups;
   }, [safeConversations, searchQuery]);
 
+  const statusToneClass = useMemo(() => {
+    if (trainingStatus === 'SUCCESS') return 'text-emerald-600 dark:text-emerald-400';
+    if (trainingStatus === 'FAILURE') return 'text-red-600 dark:text-red-400';
+    if (trainingStatus === 'PENDING' || trainingStatus === 'PROGRESS') {
+      return 'text-amber-600 dark:text-amber-400';
+    }
+    return 'text-neutral-500 dark:text-neutral-400';
+  }, [trainingStatus]);
+
   return (
     <div className="w-80 flex flex-col h-full glass border-r border-white/20 dark:border-white/5 relative z-20">
 
@@ -74,6 +87,30 @@ export default function Sidebar({
             className="w-full h-10 bg-white/50 dark:bg-black/20 border-white/20 focus:bg-white dark:focus:bg-black/40"
             leftIcon={<FiSearch className="text-neutral-500" />}
           />
+        </div>
+        <div className="rounded-xl border border-white/30 dark:border-white/10 bg-white/60 dark:bg-black/20 p-3 space-y-2">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs font-semibold text-neutral-700 dark:text-neutral-200 uppercase tracking-wide">
+              GPT-2 Training
+            </p>
+            <span className={`text-[11px] font-semibold ${statusToneClass}`}>
+              {trainingStatus}
+            </span>
+          </div>
+          <p className="text-xs text-neutral-500 dark:text-neutral-400 line-clamp-2">
+            {trainingMessage}
+          </p>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="w-full justify-center"
+            leftIcon={<FiCpu />}
+            loading={trainingActionLoading}
+            disabled={trainingActionLoading || ['PENDING', 'PROGRESS'].includes(trainingStatus)}
+            onClick={onStartTraining}
+          >
+            Start Fine-Tuning
+          </Button>
         </div>
       </div>
 
