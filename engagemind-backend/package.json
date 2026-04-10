@@ -4,7 +4,8 @@
   "main": "index.js",
   "scripts": {
     "start": "node server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test:api": "node run_api_tests.js",
+    "test": "npm run test:api"
   },
   "keywords": [],
   "author": "",
