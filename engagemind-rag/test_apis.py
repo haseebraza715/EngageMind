@@ -10,7 +10,9 @@ import json
 from datetime import datetime
 
 # Add parent directory to path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+script_dir = os.path.dirname(os.path.abspath(__file__))
+os.chdir(script_dir)
+sys.path.insert(0, os.path.dirname(script_dir))
 
 # Set test environment variables
 os.environ.setdefault('MISTRAL_API_KEY', 'test-key-for-imports')

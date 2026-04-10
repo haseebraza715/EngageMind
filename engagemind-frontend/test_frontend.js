@@ -54,12 +54,13 @@ function testWarning(name, testFn) {
 
 // Test Suite
 async function runTests() {
+  const projectRoot = __dirname;
   log('\n' + '='.repeat(60), 'cyan');
   log('FRONTEND TEST SUITE', 'cyan');
   log('='.repeat(60), 'cyan');
-  log(`Working Directory: ${process.cwd()}\n`, 'blue');
+  log(`Project Root: ${projectRoot}\n`, 'blue');
 
-  const srcPath = path.join(process.cwd(), 'src');
+  const srcPath = path.join(projectRoot, 'src');
 
   // Test 1: Core Files
   log('\n📁 Core Files:', 'blue');
@@ -234,11 +235,13 @@ async function runTests() {
   // Test 10: Package.json
   log('\n📦 Dependencies:', 'blue');
   test('package.json exists', () => {
-    if (!fs.existsSync('package.json')) throw new Error('package.json not found');
+    if (!fs.existsSync(path.join(projectRoot, 'package.json'))) {
+      throw new Error('package.json not found');
+    }
   });
 
   test('React 19 in package.json', () => {
-    const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+    const pkg = JSON.parse(fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf8'));
     if (!pkg.dependencies.react || !pkg.dependencies.react.includes('19')) {
       throw new Error('React 19 not found in dependencies');
     }
