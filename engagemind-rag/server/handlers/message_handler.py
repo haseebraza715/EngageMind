@@ -5,7 +5,6 @@ Message handling and RAG pipeline orchestration.
 import logging
 import os
 import time
-from datetime import datetime
 from typing import Any, Dict, Tuple
 
 from flask import jsonify
@@ -41,22 +40,15 @@ def handle_no_documents(user_id: str, query: str, conversation_id: str, db) -> s
         # Generate contextual response using LLM
         response = generate_no_doc_response(query, history)
 
-        # Save user and assistant messages to MongoDB
-        timestamp = int(time.time() * 1000)
+        # Save assistant message to MongoDB. User message was already stored by `handle_message`.
+        timestamp = int(time.time())
         db.chats.update_one(
             {"conversation_id": conversation_id, "user_id": user_id},
             {
-                "$push": {
-                    "messages": {
-                        "$each": [
-                            {"sender": "user", "text": query, "timestamp": timestamp},
-                            {"sender": "assistant", "text": response, "timestamp": timestamp + 1}
-                        ]
-                    }
-                },
-                "$set": {"updated_at": datetime.utcnow()}
+                "$push": {"messages": {"sender": "assistant", "text": response, "timestamp": timestamp}},
+                "$set": {"updated_at": timestamp + 1},
             },
-            upsert=True
+            upsert=False,
         )
 
         logger.info(f"[NO DOCS] Handled query for user {user_id} without documents")
@@ -125,24 +117,24 @@ def handle_message(
     if not user_msg:
         return jsonify({"error": "No message provided"}), 400
 
-    timestamp = int(time.time())
-    filter_q = {"conversation_id": conversation_id, "user_id": user_id}
-
-    # Verify conversation exists
-    convo = db.chats.find_one(filter_q)
-    if not convo:
-        return jsonify({"error": "Conversation not found"}), 404
-
-    # Save user message
-    db.chats.update_one(
-        filter_q,
-        {
-            "$push": {"messages": {"sender": "user", "text": user_msg, "timestamp": timestamp}},
-            "$set": {"updated_at": timestamp}
-        }
-    )
-
     try:
+        timestamp = int(time.time())
+        filter_q = {"conversation_id": conversation_id, "user_id": user_id}
+
+        # Verify conversation exists
+        convo = db.chats.find_one(filter_q)
+        if not convo:
+            return jsonify({"error": "Conversation not found"}), 404
+
+        # Save user message
+        db.chats.update_one(
+            filter_q,
+            {
+                "$push": {"messages": {"sender": "user", "text": user_msg, "timestamp": timestamp}},
+                "$set": {"updated_at": timestamp}
+            }
+        )
+
         # ============================================================
         # INTENT DETECTION - Skip RAG for chitchat/greetings
         # ============================================================
