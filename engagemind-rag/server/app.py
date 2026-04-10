@@ -48,7 +48,8 @@ logger = logging.getLogger(__name__)
 # CONFIGURATION
 # ============================================================================
 
-load_dotenv()
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+load_dotenv(os.path.join(BASE_DIR, "..", ".env"), override=False)
 api_key = os.getenv("MISTRAL_API_KEY")
 tavily_api_key = os.getenv("TAVILY_API_KEY")
 
@@ -63,12 +64,16 @@ if TAVILY_AVAILABLE and tavily_api_key:
 else:
     logger.warning("Tavily web search disabled (no API key or package not installed)")
 
-# MongoDB connection
-mongodb_client = pymongo.MongoClient(os.getenv("MONGO_URL", "mongodb://localhost:27017/"))
+# MongoDB connection (fail fast when unavailable)
+mongodb_client = pymongo.MongoClient(
+    os.getenv("MONGO_URL", "mongodb://localhost:27017/"),
+    serverSelectionTimeoutMS=int(os.getenv("MONGO_TIMEOUT_MS", "5000")),
+    connectTimeoutMS=int(os.getenv("MONGO_TIMEOUT_MS", "5000")),
+    socketTimeoutMS=int(os.getenv("MONGO_TIMEOUT_MS", "5000")),
+)
 state_db = mongodb_client["demo_db"]
 state_collection = state_db["conversation_states"]
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 INDEX_DIR = os.path.join(BASE_DIR, "..", "faiss_index_dir")
 
 
@@ -377,7 +382,9 @@ def register_routes(app, mongo):
 
 def create_app() -> Flask:
     """Create and configure the Flask application."""
-    app = Flask(__name__, static_folder="../../static", static_url_path="/")
+    # Resolve static UI directory relative to this file (works regardless of cwd).
+    static_folder = os.path.join(BASE_DIR, "..", "static")
+    app = Flask(__name__, static_folder=static_folder, static_url_path="/")
 
     # CORS
     cors_origins = os.getenv("CORS_ORIGINS", "*")
@@ -389,25 +396,45 @@ def create_app() -> Flask:
 
     # MongoDB
     mongo_url = os.getenv("MONGO_URL", "mongodb://localhost:27017/demo_db")
+    if "serverSelectionTimeoutMS" not in mongo_url:
+        joiner = "&" if "?" in mongo_url else "?"
+        mongo_url = f"{mongo_url}{joiner}serverSelectionTimeoutMS=5000&connectTimeoutMS=5000&socketTimeoutMS=5000"
     app.config["MONGO_URI"] = mongo_url
     mongo = PyMongo(app)
 
     with app.app_context():
-        # Create indexes
-        mongo.db.documents.create_index([("user_id", pymongo.ASCENDING)])
-        mongo.db.chats.create_index([
-            ("user_id", pymongo.ASCENDING),
-            ("conversation_id", pymongo.ASCENDING)
-        ], unique=True)
-        mongo.db.chats.create_index([("updated_at", pymongo.DESCENDING)])
+        # Create indexes.
+        #
+        # Startup should not hard-fail if MongoDB isn't available yet; endpoints
+        # will still error later, but the Flask service should remain runnable.
+        try:
+            mongo.db.documents.create_index([("user_id", pymongo.ASCENDING)])
+            mongo.db.chats.create_index(
+                [
+                    ("user_id", pymongo.ASCENDING),
+                    ("conversation_id", pymongo.ASCENDING),
+                ],
+                unique=True,
+            )
+            mongo.db.chats.create_index([("updated_at", pymongo.DESCENDING)])
+        except Exception as e:
+            logger.warning(f"[Mongo] Skipping index creation (Mongo unavailable): {str(e)[:120]}")
 
     # Rate limiting
     default_limits = os.getenv("RATE_LIMITS", "100 per minute, 2000 per hour").split(",")
+    limiter_storage_uri = mongo_url
+    try:
+        mongodb_client.admin.command("ping")
+    except Exception:
+        # Keep the API fully usable even when MongoDB is temporarily unavailable.
+        limiter_storage_uri = "memory://"
+        logger.info("[RateLimiter] Falling back to in-memory storage (Mongo unavailable)")
+
     limiter = Limiter(
         key_func=get_remote_address,
         app=app,
         default_limits=default_limits,
-        storage_uri=mongo_url
+        storage_uri=limiter_storage_uri
     )
 
     @app.errorhandler(429)
