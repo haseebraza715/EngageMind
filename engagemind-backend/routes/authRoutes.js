@@ -15,7 +15,7 @@ router.post('/register', async (req, res) => {
   try {
     console.log('Registration attempt:', { username: req.body.username, email: req.body.email });
     
-    const { username, email, password, role } = req.body;
+    const { username, email, password } = req.body;
 
     // Validate input
     if (!username || !email || !password) {
@@ -67,7 +67,7 @@ router.post('/register', async (req, res) => {
       provider: 'local',
       verificationToken,
       verificationTokenExpires,
-      role: role || 'user',
+      role: 'user',
       verified: false,
     });
 
@@ -191,6 +191,10 @@ router.post('/login', async (req, res) => {
       username: user.username,
       role: user.role
     };
+
+    if (!process.env.JWT_SECRET) {
+      return res.status(500).json({ error: 'Server JWT configuration is missing' });
+    }
 
     const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1h' });
 
