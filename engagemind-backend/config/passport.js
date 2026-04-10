@@ -1,5 +1,6 @@
 // Load environment variables FIRST
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;

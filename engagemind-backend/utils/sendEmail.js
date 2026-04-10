@@ -1,10 +1,9 @@
 const { Resend } = require('resend');
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
 async function sendEmail({ to, subject, html, text }) {
   // Check if Resend API key is configured
-  if (!process.env.RESEND_API_KEY) {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
     console.warn('⚠️  RESEND_API_KEY not configured. Email sending is disabled.');
     console.warn('   Registration will succeed but verification email will not be sent.');
     console.warn('   To enable emails, set RESEND_API_KEY in your .env file');
@@ -12,6 +11,7 @@ async function sendEmail({ to, subject, html, text }) {
   }
 
   try {
+    const resend = new Resend(apiKey);
     const response = await resend.emails.send({
       from: 'EngageMind <onboarding@resend.dev>', 
       to,

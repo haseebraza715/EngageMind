@@ -1,4 +1,5 @@
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
 
 // Fix for Node.js v25 compatibility with buffer-equal-constant-time
 // Node.js v25 removed SlowBuffer, so we need to patch it before modules load
@@ -36,6 +37,10 @@ const app = express();
 
 connectDB();
 
+const sessionSecret = process.env.SESSION_SECRET || process.env.JWT_SECRET;
+if (!sessionSecret) {
+  console.warn('⚠️  SESSION_SECRET and JWT_SECRET are not set. Using development-only fallback secret.');
+}
 
 // CORS configuration - allow all origins for development
 app.use(cors({
@@ -46,7 +51,7 @@ app.use(cors({
 }));
 app.use(express.json()); 
 app.use(session({
-  secret: process.env.SESSION_SECRET || 'keyboard cat',
+  secret: sessionSecret || 'engagemind-dev-session-secret',
   resave: false,
   saveUninitialized: false,
   cookie: {
