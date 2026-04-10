@@ -1,94 +1,145 @@
 import logging
-from celery import shared_task
-from transformers import GPT2LMHeadModel, GPT2Tokenizer, Trainer, TrainingArguments
-from peft import LoraConfig, get_peft_model
-from datasets import Dataset
-import torch
-import pymongo
-from bson import Binary
 import os
+import time
+from pathlib import Path
+from typing import List
 
-# Set up logging
+import pymongo
+import torch
+from datasets import Dataset
+from peft import LoraConfig, get_peft_model
+from transformers import (
+    DataCollatorForLanguageModeling,
+    GPT2LMHeadModel,
+    GPT2Tokenizer,
+    Trainer,
+    TrainingArguments,
+)
+
+from fine_tune.celery_config import app as celery_app
+
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# MongoDB connection
-mongo_client = pymongo.MongoClient("mongodb://localhost:27017/")
-db = mongo_client["demo_db"] 
+mongo_url = os.getenv("MONGO_URL", "mongodb://localhost:27017/demo_db")
+mongo_client = pymongo.MongoClient(mongo_url)
+db_name = mongo_url.rsplit("/", 1)[-1] or "demo_db"
+db = mongo_client[db_name]
 model_collection = db["models"]
 
-@shared_task(bind=True)
+
+def _normalize_dataset_texts(dataset_texts: List[str]) -> List[str]:
+    cleaned: List[str] = []
+
+    for item in dataset_texts or []:
+        if item is None:
+            continue
+        if isinstance(item, (bytes, bytearray)):
+            text = bytes(item).decode("utf-8", errors="ignore")
+        else:
+            text = str(item)
+        text = text.strip()
+        if text:
+            cleaned.append(text)
+
+    return cleaned
+
+
+@celery_app.task(bind=True, name="fine_tune.gpt2_lora")
 def fine_tune_gpt2_lora(self, user_id: str, dataset_texts: list, output_dir: str):
     """Fine-tune GPT-2 with LoRA on user-specific dataset."""
     try:
-        logger.info(f"[FINE-TUNE] Starting GPT-2 LoRA fine-tuning for user {user_id}")
+        logger.info("[FINE-TUNE] Starting GPT-2 LoRA fine-tuning for user %s", user_id)
+        os.makedirs(output_dir, exist_ok=True)
 
+        cleaned_texts = _normalize_dataset_texts(dataset_texts)
+        if not cleaned_texts:
+            raise ValueError("No valid training samples found in uploaded documents.")
+
+        self.update_state(state="PROGRESS", meta={"message": "Preparing tokenizer and model"})
         tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        if tokenizer.pad_token is None:
+            tokenizer.pad_token = tokenizer.eos_token
+
         model = GPT2LMHeadModel.from_pretrained("gpt2")
+        model.config.pad_token_id = tokenizer.pad_token_id
 
-        dataset = Dataset.from_dict({"text": dataset_texts})
+        self.update_state(state="PROGRESS", meta={"message": "Tokenizing training corpus"})
+        dataset = Dataset.from_dict({"text": cleaned_texts})
+
         def tokenize_function(examples):
-            return tokenizer(examples["text"], truncation=True, max_length=128, padding="max_length")
-        tokenized_dataset = dataset.map(tokenize_function, batched=True)
-        tokenized_dataset.set_format("torch", columns=["input_ids", "attention_mask"])
+            tokenized = tokenizer(
+                examples["text"],
+                truncation=True,
+                max_length=256,
+                padding="max_length",
+            )
+            tokenized["labels"] = tokenized["input_ids"].copy()
+            return tokenized
 
-        # Configure LoRA
+        tokenized_dataset = dataset.map(tokenize_function, batched=True, remove_columns=["text"])
+        tokenized_dataset.set_format("torch", columns=["input_ids", "attention_mask", "labels"])
+
         lora_config = LoraConfig(
-            r=16,  # Rank of LoRA matrices
-            lora_alpha=32,  # Scaling factor
+            r=16,
+            lora_alpha=32,
             lora_dropout=0.05,
             bias="none",
             task_type="CAUSAL_LM",
-            target_modules=["c_attn", "c_proj"]  # Target attention and projection layers
+            target_modules=["c_attn", "c_proj"],
         )
         model = get_peft_model(model, lora_config)
 
-        # Define training arguments
+        use_cuda = torch.cuda.is_available()
         training_args = TrainingArguments(
             output_dir=output_dir,
-            num_train_epochs=3,
-            per_device_train_batch_size=4,
-            gradient_accumulation_steps=2,
+            num_train_epochs=1,
+            per_device_train_batch_size=1,
+            gradient_accumulation_steps=1,
             learning_rate=3e-4,
-            fp16=True,  # Mixed precision for GPU efficiency
-            logging_steps=10,
-            save_steps=100,
-            save_total_limit=2,
+            fp16=use_cuda,
+            logging_steps=1,
+            save_strategy="epoch",
+            save_total_limit=1,
             report_to="none",
+            dataloader_pin_memory=use_cuda,
+            remove_unused_columns=False,
         )
 
-        # Initialize trainer
+        data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
         trainer = Trainer(
             model=model,
             args=training_args,
             train_dataset=tokenized_dataset,
+            data_collator=data_collator,
         )
 
-        # Update task state for progress
-        self.update_state(state="PROGRESS", meta={"status": "Training started"})
-
-        # Train the model
+        self.update_state(state="PROGRESS", meta={"message": "Training in progress"})
         trainer.train()
 
-        # Save the fine-tuned model
+        self.update_state(state="PROGRESS", meta={"message": "Saving adapter artifacts"})
         model.save_pretrained(output_dir)
         tokenizer.save_pretrained(output_dir)
 
-        # Store model metadata in MongoDB
-        with open(os.path.join(output_dir, "adapter_model.bin"), "rb") as f:
-            model_binary = Binary(f.read())
-        model_collection.insert_one({
+        artifact_files = sorted(
+            p.name for p in Path(output_dir).iterdir() if p.is_file()
+        )
+        completed_at = int(time.time())
+        metadata = {
             "user_id": user_id,
             "model_type": "gpt2-lora",
             "output_dir": output_dir,
-            "model_binary": model_binary,
-            "timestamp": int(time.time())
-        })
+            "trained_samples": len(cleaned_texts),
+            "artifact_files": artifact_files,
+            "completed_at": completed_at,
+        }
 
-        logger.info(f"[FINE-TUNE] Completed GPT-2 LoRA fine-tuning for user {user_id}")
-        return {"status": "success", "output_dir": output_dir}
+        model_collection.insert_one(metadata)
+        logger.info("[FINE-TUNE] Completed GPT-2 LoRA fine-tuning for user %s", user_id)
+        return metadata
 
     except Exception as e:
-        logger.exception(f"[FINE-TUNE] Error during fine-tuning for user {user_id}: {e}")
+        logger.exception("[FINE-TUNE] Error during fine-tuning for user %s: %s", user_id, e)
         self.update_state(state="FAILURE", meta={"error": str(e)})
         raise

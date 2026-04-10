@@ -1,22 +1,29 @@
+import os
+
+from dotenv import load_dotenv
 from celery import Celery
 
-# Configure Celery with Redis as broker and backend
+
+_FINE_TUNE_DIR = os.path.dirname(os.path.abspath(__file__))
+_RAG_ROOT = os.path.dirname(_FINE_TUNE_DIR)
+load_dotenv(os.path.join(_RAG_ROOT, ".env"), override=False)
+
+redis_url = os.getenv("CELERY_REDIS_URL", "redis://localhost:6379/0")
+
+# Configure Celery with Redis as broker and backend.
 app = Celery(
-    'rag_app',
-    broker='redis://localhost:6379/0',
-    backend='redis://localhost:6379/0'
+    "engagemind_fine_tune",
+    broker=redis_url,
+    backend=redis_url,
+    include=["fine_tune.tasks.tasks"],
 )
 
-# Celery configuration
 app.conf.update(
-    task_serializer='json',
-    accept_content=['json'],
-    result_serializer='json',
-    timezone='UTC',
+    task_serializer="json",
+    accept_content=["json"],
+    result_serializer="json",
+    timezone="UTC",
     enable_utc=True,
     task_track_started=True,
-    result_expires=3600,  # Results expire after 1 hour
+    result_expires=3600,
 )
-
-# Auto-discover tasks in the 'rag.fine_tune.tasks' module
-app.autodiscover_tasks(['rag.fine_tune.tasks.tasks'])
