@@ -1,99 +1,121 @@
-# EngageMind
+# EngageMind (Thesis Alignment Build)
 
-EngageMind is an AI-powered educational platform built as a thesis project at ELTE. It combines a modern web application with a Retrieval-Augmented Generation (RAG) engine to support grounded, document-aware learning.
+EngageMind is a thesis project at ELTE that demonstrates an authenticated conversational application with per-user memory retention, document-grounded responses (RAG), and an adaptive GPT-2 fine-tuning workflow with live status monitoring.
 
-## Overview
+## Thesis Scope
+This repository is intentionally aligned to strict thesis requirements only:
+- Authenticated interaction.
+- Per-user conversation memory.
+- RAG document upload + grounded chat.
+- Adaptive GPT-2 training trigger + status monitoring.
+- Stable integration across frontend, backend, and RAG/fine-tune services.
 
-The platform is designed to:
+Out-of-scope features are intentionally not expanded.
 
-- enable interactive question answering over uploaded learning material,
-- improve response reliability through retrieval-grounded context,
-- support modular development across independent frontend, backend, and AI services.
-
-## Project Structure
-
-The system is organized into three services:
-
-- engagemind-frontend
-  React and Tailwind CSS application for chat, document management, and user-facing workflows.
-
-- engagemind-backend
-  Node.js and Express API layer handling authentication, user management, and service orchestration.
-
-- engagemind-rag
-  Python and LangChain service implementing document ingestion, retrieval, and generation pipelines.
+## Repository Structure
+- `engagemind-frontend/`: React and Tailwind UI for chat, upload, and training status interactions.
+- `engagemind-backend/`: Node/Express auth and profile APIs.
+- `engagemind-rag/`: Flask RAG service and GPT-2 fine-tuning service.
+- `THESIS_ALIGNMENT_PLAN.md`: strict phased alignment plan used for implementation.
 
 ## Architecture Diagram
-
 ```mermaid
 flowchart LR
-  FE[Frontend\nReact + Tailwind] --> BE[Backend API\nNode.js + Express]
-  BE --> DB[(App Database)]
-  BE --> RAG[RAG Service\nPython + LangChain]
-  RAG --> VS[(Vector Store)]
-  RAG --> DS[(Document Storage)]
-  RAG --> BE
+  FE["Frontend (React)"] --> BE["Backend API (:5003)"]
+  FE --> RAG["RAG API (:5001)"]
+  FE --> FT["Fine-tune API (:5002)"]
+  BE --> DB[("MongoDB")]
+  RAG --> DB
+  FT --> DB
+  FT --> REDIS[("Redis/Celery")]
 ```
 
-## API Flow
+## Requirement Traceability
+- User authentication: backend `/auth/register`, `/auth/login`, `/auth/profile`, protected admin routes.
+- Memory retention: RAG conversation endpoints persist chat history per `user_id` in MongoDB.
+- Adaptive training path: `/api/fine-tune` starts GPT-2 LoRA task from uploaded corpus.
+- Real-time monitoring: `/api/fine-tune/status/:task_id` returns deterministic states (`PENDING`, `PROGRESS`, `SUCCESS`, `FAILURE`).
+- End-to-end integration: frontend flow supports login -> chat memory -> upload -> training trigger/status.
 
-1. Client uploads documents and sends chat requests to the backend API.
-2. Backend validates/authenticates requests and calls the RAG service for retrieval + generation.
-3. RAG service fetches relevant context from indexed documents and generates a grounded answer.
-4. Backend returns final response (and source context) to the frontend.
+## Prerequisites
+- Node.js 18+
+- Python 3.9+
+- MongoDB
+- Redis (Celery broker/backend)
 
-## Technology Stack
+## Environment Variables
+Backend (`engagemind-backend/.env`)
+- `MONGO_URI`
+- `JWT_SECRET`
+- `PORT` (default `5003`)
 
-- Frontend: React, Tailwind CSS
-- Backend: Node.js, Express
-- AI Service: Python, LangChain
+RAG (`engagemind-rag/.env`)
+- `MONGO_URL`
+- `JWT_SECRET`
+- `MISTRAL_API_KEY`
+- `CELERY_REDIS_URL` (optional, default `redis://localhost:6379/0`)
 
-## Getting Started
+Frontend (`engagemind-frontend/.env`, optional)
+- `REACT_APP_AUTH_API_URL` (default `http://localhost:5003`)
+- `REACT_APP_RAG_API_URL` (default `http://localhost:5001`)
+- `REACT_APP_FINE_TUNE_API_URL` (default `http://localhost:5002`)
 
-### 1. Configure Environment Variables
-
-Create .env files for each service directory using the example files as templates:
-
-- engagemind-frontend/.env
-- engagemind-backend/.env
-- engagemind-rag/.env
-
-### 2. Run the Services
-
-Start each service in a separate terminal.
-
+## Runbook (Startup Order)
+1. Start MongoDB.
+2. Start Redis.
+3. Start backend:
 ```bash
-# Frontend
-cd engagemind-frontend
+cd /Users/x/Downloads/Thesis/EngageMind/engagemind-backend
 npm install
 npm start
-
-# Backend
-cd engagemind-backend
-npm install
-npm start
-
-# RAG Engine
-cd engagemind-rag
-python3 -m venv venv
-source venv/bin/activate
+```
+4. Start RAG API:
+```bash
+cd /Users/x/Downloads/Thesis/EngageMind/engagemind-rag
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 python main.py
 ```
+5. Start fine-tune API:
+```bash
+cd /Users/x/Downloads/Thesis/EngageMind/engagemind-rag
+source .venv/bin/activate
+python fine_tune/fine_tune_app.py
+```
+6. Start Celery worker:
+```bash
+cd /Users/x/Downloads/Thesis/EngageMind/engagemind-rag
+source .venv/bin/activate
+celery -A fine_tune.celery_config.app worker --loglevel=info
+```
+7. Start frontend:
+```bash
+cd /Users/x/Downloads/Thesis/EngageMind/engagemind-frontend
+npm install
+npm start
+```
+
+## Verification
+Run full verification:
+```bash
+cd /Users/x/Downloads/Thesis/EngageMind
+./verify_all.sh
+```
+
+## Demo Script (Defense)
+1. Register and log in.
+2. Open chat and create a conversation.
+3. Send messages and reload to show memory retention.
+4. Upload one or more documents.
+5. Start GPT-2 fine-tuning from sidebar panel.
+6. Observe live status updates (`PENDING` -> `PROGRESS` -> terminal state).
 
 ## Deployment
+- Local: run frontend, backend, RAG, fine-tune API, and Celery worker as separate processes.
+- Production: deploy frontend as static app and backend/RAG/fine-tune as separate services with managed secrets and data stores.
 
-### Local
-
-- Run frontend, backend, and RAG services as separate processes.
-- Use local environment variables and local development databases/services.
-
-### Production
-
-- Deploy frontend as a static web app (for example Vercel or Netlify).
-- Deploy backend and RAG as independent services/containers (for example Render, Fly.io, or cloud container platforms).
-- Use managed database/vector storage, secure secret management, and internal service-to-service networking.
-
-## Thesis Context
-
-This repository is part of thesis research focused on robust AI-assisted learning and retrieval-grounded educational interaction.
+## Limitations
+- Runtime chat responses use the configured RAG + Mistral inference path; GPT-2 is used in adaptive fine-tuning workflow.
+- Fine-tuning duration depends on hardware and corpus size.
+- Full workflow requires MongoDB, Redis, and model/API dependencies.
