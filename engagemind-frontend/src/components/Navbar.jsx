@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiMenu, FiX, FiBell, FiLogOut, FiUser, FiSettings } from 'react-icons/fi';
+import { FiMenu, FiX, FiBell, FiLogOut, FiUser } from 'react-icons/fi';
 import axiosAuth from '../api/axiosAuth';
 import Avatar from './UI/Avatar';
 import Button from './UI/Button';
@@ -137,7 +137,6 @@ export default function Navbar() {
                       </div>
                     </DropdownHeader>
                     <DropdownItem icon={<FiUser />} onClick={() => navigate('/profile')}>Profile</DropdownItem>
-                    <DropdownItem icon={<FiSettings />} onClick={() => navigate('/settings')}>Settings</DropdownItem>
                     <DropdownDivider />
                     <DropdownItem icon={<FiLogOut />} danger onClick={handleLogout}>Log Out</DropdownItem>
                   </Dropdown>

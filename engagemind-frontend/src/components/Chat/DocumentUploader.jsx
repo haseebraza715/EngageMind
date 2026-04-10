@@ -36,8 +36,6 @@ export default function DocumentUploader({ onClose, onUploadSuccess }) {
       const response = await axios.post(API_ENDPOINT, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
-
-          'Authorization': 'Bearer a37877e87fd73f58bc26ed2e26b53857b1b16bb64dfde43872c4cb1c1b944942',
         },
       });
       setUploadStatus('Upload successful!');

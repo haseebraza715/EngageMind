@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const axiosChat = axios.create({
-  baseURL: 'http://localhost:5002',
+  baseURL: process.env.REACT_APP_RAG_API_URL || 'http://localhost:5001',
 });
 
 axiosChat.interceptors.request.use((config) => {
