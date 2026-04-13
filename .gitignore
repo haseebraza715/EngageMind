@@ -5,3 +5,7 @@
 # Local virtual environments
 engagemind-rag/.venv/
 .venv/
+
+# Local runtime/tooling artifacts
+.runtime-logs/
+.local-node/
