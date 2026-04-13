@@ -1,15 +1,48 @@
-# EngageMind RAG + Fine-Tune Services
+# EngageMind RAG and Fine-Tune Services
 
-This directory contains two Flask services used in the thesis demo:
-- RAG API (`main.py`, default `:5001`)
-- Fine-tune API (`fine_tune/fine_tune_app.py`, default `:5002`)
+## Overview
+This directory provides two thesis-critical Flask services:
+- **RAG API** (`main.py`, default `:5001`)
+- **Fine-tune API** (`fine_tune/fine_tune_app.py`, default `:5002`)
 
-## RAG API Responsibilities
-- Per-user conversation CRUD.
-- Message processing with document-aware retrieval.
-- Document upload and FAISS index updates.
+Together they deliver document-grounded chat, per-user memory persistence, and adaptive GPT-2 training with live status tracking.
 
-### Key RAG Endpoints
+## Responsibilities
+### RAG API
+- Conversation CRUD per authenticated user.
+- Message handling with retrieval-augmented context.
+- Document ingestion/upload pipeline.
+
+### Fine-tune API
+- Build user training corpus from uploaded documents.
+- Queue GPT-2 LoRA training task.
+- Return deterministic status semantics for frontend polling.
+
+## Required Environment
+- `MONGO_URL` (required for persistence)
+- `JWT_SECRET` (required for auth verification)
+- `MISTRAL_API_KEY` (required for configured inference path)
+- `CELERY_REDIS_URL` (default `redis://localhost:6379/0`)
+- `FINE_TUNE_DEBUG` (optional; default `false`)
+
+## Setup and Run
+```bash
+cd /Users/x/Downloads/Thesis/EngageMind/engagemind-rag
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+Start services:
+```bash
+python main.py
+python fine_tune/fine_tune_app.py
+celery -A fine_tune.celery_config.app worker --loglevel=info
+```
+
+## API Contract (Key Endpoints)
+### RAG
+- `GET /api/health`
 - `POST /api/upload`
 - `POST /api/conversation`
 - `GET /api/conversations`
@@ -17,40 +50,23 @@ This directory contains two Flask services used in the thesis demo:
 - `POST /api/conversation/<conversation_id>/message`
 - `DELETE /api/conversation/<conversation_id>`
 
-## Fine-Tune API Responsibilities
-- Start GPT-2 LoRA fine-tuning from user-uploaded corpus.
-- Provide deterministic status polling contract.
-
-### Key Fine-Tune Endpoints
+### Fine-Tune
 - `POST /api/fine-tune`
 - `GET /api/fine-tune/status/<task_id>`
 
-### Status Semantics
-- `PENDING`: task queued.
-- `PROGRESS`: task running.
-- `SUCCESS`: finished with artifact metadata.
-- `FAILURE`: failed with readable error message.
+Status values:
+- `PENDING`
+- `PROGRESS`
+- `SUCCESS`
+- `FAILURE`
 
-## Required Env
-- `MONGO_URL`
-- `JWT_SECRET`
-- `MISTRAL_API_KEY`
-- `CELERY_REDIS_URL` (optional)
+## Thesis Alignment Notes
+- Conversation/message timestamps are normalized for consistent memory ordering.
+- Fine-tune corpus is built from actual uploaded content (not static placeholders).
+- Failures return readable JSON error states for defense-safe behavior.
 
-## Run
+## Verification
 ```bash
-cd /Users/x/Downloads/Thesis/EngageMind/engagemind-rag
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-python main.py
-python fine_tune/fine_tune_app.py
-celery -A fine_tune.celery_config.app worker --loglevel=info
-```
-
-## Tests
-```bash
-cd /Users/x/Downloads/Thesis/EngageMind/engagemind-rag
 source .venv/bin/activate
 python test_apis.py
 python test_phase1_simple.py
@@ -58,8 +74,16 @@ python test_security_fixes.py
 python verify_phase3.py
 python verify_phase4.py
 python test_fine_tune_contract.py
+python test_thesis_hard_regression.py
 ```
 
-## Thesis Alignment Notes
-- Conversation `updated_at` and message timestamps are normalized to epoch seconds for consistent memory ordering.
-- Fine-tune corpus extraction reads actual uploaded document content (text/pdf/docx parsing path).
+## Troubleshooting
+- RAG health `503`: MongoDB unavailable.
+- Fine-tune start/status errors: check Redis and Celery worker.
+- Auth failures (`401`): verify token issuer and shared `JWT_SECRET`.
+
+## References
+- Local architecture: [ARCHITECTURE.md](./ARCHITECTURE.md)
+- Root runbook: [README.md](../README.md)
+- System design: [ARCHITECTURE.md](../ARCHITECTURE.md)
+- Defense checklist: [docs/DEFENSE_DEMO_CHECKLIST.md](../docs/DEFENSE_DEMO_CHECKLIST.md)
