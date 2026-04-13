@@ -208,4 +208,5 @@ def check_fine_tune_status(task_id):
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5002, debug=True)
+    debug = os.getenv("FINE_TUNE_DEBUG", "false").lower() == "true"
+    app.run(host="0.0.0.0", port=5002, debug=debug)
