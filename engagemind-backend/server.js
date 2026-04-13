@@ -35,8 +35,6 @@ const session = require('express-session');
 
 const app = express();
 
-connectDB();
-
 const sessionSecret = process.env.SESSION_SECRET || process.env.JWT_SECRET;
 if (!sessionSecret) {
   console.warn('⚠️  SESSION_SECRET and JWT_SECRET are not set. Using development-only fallback secret.');
@@ -82,6 +80,7 @@ app.post('/test', (req, res) => {
 
 // Use port 5000, but if it's taken by AirPlay, fallback to 5003
 const PORT = process.env.PORT || 5003;
+connectDB();
 app.listen(PORT, () => {
   console.log(`✅ Server listening on port ${PORT}`);
   console.log(`✅ API available at http://localhost:${PORT}`);

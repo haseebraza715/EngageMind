@@ -7,7 +7,20 @@ const authMiddleware = require('../middleware/authMiddleware');
 const sendEmail = require('../utils/sendEmail');
 const crypto = require('crypto');
 const passport = require('passport');
+const mongoose = require('mongoose');
 
+
+const requireDbConnection = (res) => {
+  if (mongoose.connection.readyState === 1) {
+    return true;
+  }
+
+  res.status(503).json({
+    error: 'Database unavailable',
+    message: 'MongoDB is not connected. Please start MongoDB and try again.',
+  });
+  return false;
+};
 
 
 // Register (Local)
@@ -35,6 +48,8 @@ router.post('/register', async (req, res) => {
       console.log('Validation failed: Password too short');
       return res.status(400).json({ error: 'Password must be at least 6 characters long' });
     }
+
+    if (!requireDbConnection(res)) return;
 
     // Check for existing email
     const existingEmail = await User.findOne({ email });
@@ -133,6 +148,8 @@ router.get('/verify-email', async (req, res) => {
       return res.status(400).json({ error: 'Verification token is required' });
     }
 
+    if (!requireDbConnection(res)) return;
+
     const user = await User.findOne({
       verificationToken: token,
       verificationTokenExpires: { $gt: Date.now() },
@@ -165,6 +182,8 @@ router.post('/login', async (req, res) => {
     if (!emailOrUsername || !password) {
       return res.status(400).json({ error: 'Please provide all required fields' });
     }
+
+    if (!requireDbConnection(res)) return;
 
     const user = await User.findOne({
       $or: [
@@ -218,6 +237,8 @@ router.get('/profile', authMiddleware, async (req, res) => {
   try {
     const userId = req.user.userId;
 
+    if (!requireDbConnection(res)) return;
+
     const user = await User.findById(userId)
       .select('-password -verificationToken -verificationTokenExpires -passwordResetToken -passwordResetExpires')
       .lean();
@@ -254,6 +275,8 @@ router.put('/edit-profile', authMiddleware, async (req, res) => {
   try {
     const userId = req.user.userId;
     const { username, bio, avatar, socialLinks } = req.body;
+
+    if (!requireDbConnection(res)) return;
 
     const updates = {};
 
@@ -378,6 +401,8 @@ router.post('/forgot-password', async (req, res) => {
     const { email } = req.body;
     if (!email) return res.status(400).json({ error: 'Email is required' });
 
+    if (!requireDbConnection(res)) return;
+
     const user = await User.findOne({ email });
     if (!user) {
       // Don't leak user existence
@@ -416,6 +441,8 @@ router.post('/reset-password', async (req, res) => {
     if (!token || !newPassword) {
       return res.status(400).json({ error: 'Token and new password are required' });
     }
+
+    if (!requireDbConnection(res)) return;
 
     const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
 
