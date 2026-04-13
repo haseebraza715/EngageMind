@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-THESIS_DIR="$(cd "${ROOT_DIR}/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+THESIS_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-BACKEND_DIR="${ROOT_DIR}/engagemind-backend"
-FRONTEND_DIR="${ROOT_DIR}/engagemind-frontend"
-RAG_DIR="${ROOT_DIR}/engagemind-rag"
+BACKEND_DIR="${THESIS_DIR}/engagemind-backend"
+FRONTEND_DIR="${THESIS_DIR}/engagemind-frontend"
+RAG_DIR="${THESIS_DIR}/engagemind-rag"
 
 LOCAL_NODE_BIN="${THESIS_DIR}/.local-node/bin"
 if [[ -x "${LOCAL_NODE_BIN}/npm" ]]; then
@@ -26,12 +26,16 @@ need_cmd() {
 
 need_cmd npm
 need_cmd python3
-need_cmd docker
 
-DOCKER_AVAILABLE="true"
-if ! docker info >/dev/null 2>&1; then
-  DOCKER_AVAILABLE="false"
-  log "Docker daemon unavailable; skipping MongoDB container bootstrap"
+DOCKER_AVAILABLE="false"
+if command -v docker >/dev/null 2>&1; then
+  if docker info >/dev/null 2>&1; then
+    DOCKER_AVAILABLE="true"
+  else
+    log "Docker daemon unavailable; skipping MongoDB container bootstrap"
+  fi
+else
+  log "Docker not installed; skipping MongoDB container bootstrap"
 fi
 
 if [[ "${DOCKER_AVAILABLE}" == "true" ]]; then
