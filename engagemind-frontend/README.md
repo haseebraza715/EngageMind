@@ -23,9 +23,16 @@ Default URL: `http://localhost:3000`
 
 ## Setup and Run
 ```bash
-cd /Users/x/Downloads/Thesis/EngageMind/engagemind-frontend
+# from repository root
+cd engagemind-frontend
 npm install
 npm start
+```
+
+Or start all services from root:
+```bash
+# from EngageMind repository root
+./scripts/run_all.sh
 ```
 
 ## Thesis Demo Flow

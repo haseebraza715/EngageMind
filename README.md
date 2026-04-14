@@ -23,7 +23,6 @@ EngageMind is a thesis project with four local services:
 
 ## Quick Start (Recommended)
 ```bash
-cd /Users/x/Downloads/Thesis/EngageMind
 ./scripts/run_all.sh
 ```
 
@@ -35,17 +34,50 @@ Expected local endpoints:
 
 Logs are written to `.runtime-logs/`.
 
+## Regenerate Thesis Diagrams
+Mermaid sources are versioned under `docs/diagrams-src/`.
+
+To render updated diagrams and sync thesis figures:
+```bash
+./scripts/export_thesis_diagrams.sh
+```
+
+This refreshes:
+- `docs/diagrams-export/engagemind_architecture.(png|svg)`
+- `docs/diagrams-export/diagram.(png|svg)`
+- `../ELTE_FI_Thesis_Template/engagemind_architecture.png`
+- `../ELTE_FI_Thesis_Template/diagram.png`
+
+## Refresh Chapter 2 Screenshots
+To regenerate thesis user-flow screenshots from the running frontend/backend/rag stack:
+```bash
+npx -y playwright@1.53.0 install chromium  # first run only
+./scripts/capture_phase3_screenshots.sh
+```
+
+The capture flow automatically uploads a seeded `.txt` source document before chat examples,
+so `chat_Example1.png`, `chat_Example2.png`, and `chat_Example3.png` show grounded, higher-quality answers.
+
+This refreshes:
+- `../ELTE_FI_Thesis_Template/landing_page.png`
+- `../ELTE_FI_Thesis_Template/register.png`
+- `../ELTE_FI_Thesis_Template/login_main.png`
+- `../ELTE_FI_Thesis_Template/chat_interface.png`
+- `../ELTE_FI_Thesis_Template/chat_Example1.png`
+- `../ELTE_FI_Thesis_Template/chat_Example2.png`
+- `../ELTE_FI_Thesis_Template/chat_Example3.png`
+
 ## Manual Start
 1. Backend
 ```bash
-cd /Users/x/Downloads/Thesis/EngageMind/engagemind-backend
+cd engagemind-backend
 npm install
 npm start
 ```
 
 2. RAG API
 ```bash
-cd /Users/x/Downloads/Thesis/EngageMind/engagemind-rag
+cd engagemind-rag
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
@@ -54,15 +86,15 @@ python main.py
 
 3. Fine-tune API and Celery worker
 ```bash
-cd /Users/x/Downloads/Thesis/EngageMind/engagemind-rag
+cd engagemind-rag
 source .venv/bin/activate
 python fine_tune/fine_tune_app.py
-celery -A fine_tune.celery_config.app worker --loglevel=info
+celery -A fine_tune.celery_config.app worker --pool=solo --concurrency=1 --loglevel=info
 ```
 
 4. Frontend
 ```bash
-cd /Users/x/Downloads/Thesis/EngageMind/engagemind-frontend
+cd engagemind-frontend
 npm install
 npm start
 ```
@@ -75,7 +107,6 @@ npm start
 
 ## Verification
 ```bash
-cd /Users/x/Downloads/Thesis/EngageMind
 ./scripts/verify_all.sh
 ```
 
@@ -91,5 +122,7 @@ For RAG/fine-tune specific validation, see [engagemind-rag/README.md](./engagemi
   - `run_all.sh` skips startup for occupied ports by design.
 
 ## Notes
-- Keep `.env` values consistent across backend and RAG (`JWT_SECRET`, DB URLs, provider keys).
+- Keep `.env` values consistent across backend and RAG.
+- Must-match values: `JWT_SECRET` and Mongo connection/database targets (`MONGO_URI` vs `MONGO_URL`).
+- For provider consistency in RAG, set `CHAT_PROVIDER` and corresponding provider keys in `engagemind-rag/.env`.
 - Use the architecture docs for deeper service and data-flow details.

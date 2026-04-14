@@ -7,7 +7,6 @@
 
 ## Start
 ```bash
-cd /Users/x/Downloads/Thesis/EngageMind
 ./scripts/run_all.sh
 ```
 

@@ -21,7 +21,7 @@ Together they provide document-grounded chat, conversation persistence, and GPT-
 
 ## Required Environment
 ### Core
-- `MONGO_URL` (required)
+- `MONGO_URL` (required, for example `mongodb://localhost:27017/engagemindbackend`)
 - `JWT_SECRET` (required)
 - `MISTRAL_API_KEY` (required for embeddings/retrieval)
 - `CELERY_REDIS_URL` (default `redis://localhost:6379/0`)
@@ -46,26 +46,35 @@ If `CHAT_PROVIDER=openrouter`:
 
 ## Setup
 ```bash
-cd /Users/x/Downloads/Thesis/EngageMind/engagemind-rag
+# from EngageMind repository root
+cd engagemind-rag
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+Or start all services from the repository root:
+```bash
+./scripts/run_all.sh
+```
+
 ## Run
 Start RAG API:
 ```bash
+# in engagemind-rag/
 python main.py
 ```
 
 Start fine-tune API:
 ```bash
+# in engagemind-rag/
 python fine_tune/fine_tune_app.py
 ```
 
 Start worker:
 ```bash
-celery -A fine_tune.celery_config.app worker --loglevel=info
+# in engagemind-rag/
+celery -A fine_tune.celery_config.app worker --pool=solo --concurrency=1 --loglevel=info
 ```
 
 ## API Endpoints
@@ -102,9 +111,8 @@ Benchmark case files:
 - `test/prompt_benchmark_20_set2.json`
 
 ## Troubleshooting
-- `MongooseError: Cannot call users.findOne() before initial connection is complete`:
-  - MongoDB is not reachable or DB connect is not finished before auth callback executes.
-  - Confirm Mongo is running at `localhost:27017` and backend startup logs show DB connected.
+- `Invalid or expired token` on RAG/fine-tune endpoints:
+  - Ensure frontend token is valid and `JWT_SECRET` values match between backend and RAG `.env` files.
 - Fine-tune `ObjectId is not JSON serializable`:
   - Fixed in current codepath by serializing ObjectIds before Celery/API response payloads.
   - If seen again, check worker/service mismatch or stale process.

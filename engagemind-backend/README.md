@@ -20,9 +20,16 @@ Default URL: `http://localhost:5003`
 
 ## Setup and Run
 ```bash
-cd /Users/x/Downloads/Thesis/EngageMind/engagemind-backend
+# from repository root
+cd engagemind-backend
 npm install
 npm start
+```
+
+Or start all services from root:
+```bash
+# from EngageMind repository root
+./scripts/run_all.sh
 ```
 
 ## API Contract (Key Endpoints)
@@ -39,6 +46,7 @@ npm start
 - Registration role is server-forced to `user` (no client role escalation).
 - JWT payload is the identity contract used by frontend and downstream services.
 - On MongoDB outage, routes fail fast with clear responses instead of hanging.
+- Server startup is DB-gated so auth routes are not exposed before Mongo is ready.
 
 ## Verification
 ```bash
