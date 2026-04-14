@@ -7,13 +7,13 @@ import time
 from typing import Any, Tuple
 
 from flask import jsonify
-from langchain_mistralai.chat_models import ChatMistralAI
 
 from rag.utils.conversation_manager import (
     generate_conversation_id,
     generate_conversation_title,
     generate_conversation_title_from_context
 )
+from rag.utils.llm_factory import create_chat_llm
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +40,10 @@ def create_new_conversation(user_id: str, db, api_key: str, custom_name: str = "
             title = custom_name
         elif initial_message:
             # Generate title from first message using LLM
-            title = generate_conversation_title(initial_message, llm=ChatMistralAI(mistral_api_key=api_key))
+            title = generate_conversation_title(
+                initial_message,
+                llm=create_chat_llm(mistral_api_key=api_key, purpose="title"),
+            )
         else:
             # Default title
             title = "New Conversation"
@@ -97,7 +100,7 @@ def get_conversation_by_id(user_id: str, conversation_id: str, db, api_key: str)
             if messages:
                 convo["title"] = generate_conversation_title_from_context(
                     messages,
-                    llm=ChatMistralAI(mistral_api_key=api_key)
+                    llm=create_chat_llm(mistral_api_key=api_key, purpose="title")
                 )
                 # Update in database for next time
                 db.chats.update_one(
@@ -139,7 +142,7 @@ def list_user_conversations(user_id: str, db, api_key: str) -> Tuple[Any, int]:
                 if messages:
                     convo["title"] = generate_conversation_title_from_context(
                         messages,
-                        llm=ChatMistralAI(mistral_api_key=api_key)
+                        llm=create_chat_llm(mistral_api_key=api_key, purpose="title")
                     )
                 else:
                     convo["title"] = convo.get("conversation_id", "Untitled")
