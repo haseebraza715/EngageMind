@@ -9,3 +9,6 @@ engagemind-rag/.venv/
 # Local runtime/tooling artifacts
 .runtime-logs/
 .local-node/
+
+# Generated fine-tune artifacts
+engagemind-rag/models/
