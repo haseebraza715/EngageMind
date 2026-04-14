@@ -77,19 +77,14 @@ def generate_conversation_title_from_context(
         conversation_summary = "\n".join([f"User: {msg}" for msg in recent_messages])
         
         prompt = ChatPromptTemplate.from_messages([
-            ("system", """Generate a concise, descriptive title for a conversation based on the conversation context.
+            ("system", """Create a stable conversation title from the user's recent messages.
 Rules:
+- 3 to 6 words
 - Maximum 50 characters
-- No question marks or punctuation at the end
-- Capture the MAIN topic being discussed (not just the first message)
-- Reflect what the conversation is actually about
-- Be specific but concise
-- Examples:
-  Multiple questions about OSI model → "OSI Model Discussion"
-  Questions about routing and protocols → "Routing Protocols"
-  Network security questions → "Network Security"
-  Mixed topics → "Technical Q&A" or "Document Discussion"
-Output ONLY the title, nothing else."""),
+- Focus on the dominant topic
+- No trailing punctuation
+- Avoid generic labels unless topic is truly mixed
+- Output exactly one title line and nothing else"""),
             ("human", """Conversation context:
 {conversation_summary}
 
@@ -114,7 +109,7 @@ Generate a title that reflects what this conversation is about:""")
         logger.warning(f"[TITLE] Failed to generate title from context: {e}, using fallback")
         # Fallback: Use first few words of most recent message
         last_msg = user_messages[-1]
-        words = last_msg.split()[:6]
+        words = last_msg.split()[:5]
         title = " ".join(words)
         if len(title) > max_length:
             title = title[:max_length-3] + "..."
@@ -146,17 +141,13 @@ def generate_conversation_title(message: str, llm, max_length: int = 50) -> str:
         from langchain_core.output_parsers import StrOutputParser
         
         prompt = ChatPromptTemplate.from_messages([
-            ("system", """Generate a concise, descriptive title for a conversation based on the first message.
+            ("system", """Create a concise title for a new conversation.
 Rules:
+- 3 to 6 words
 - Maximum 50 characters
-- No question marks or punctuation at the end
-- Capture the main topic or intent
-- Be specific but concise
-- Examples:
-  "What is the OSI model?" → "OSI Model Explanation"
-  "Explain routing protocols" → "Routing Protocols"
-  "Tell me about network security" → "Network Security"
-Output ONLY the title, nothing else."""),
+- Preserve the main topic and key entity
+- No trailing punctuation
+- Output exactly one title line and nothing else"""),
             ("human", "First message: {message}\n\nTitle:")
         ])
         
@@ -177,7 +168,7 @@ Output ONLY the title, nothing else."""),
     except Exception as e:
         logger.warning(f"[TITLE] Failed to generate title: {e}, using fallback")
         # Fallback: Use first few words
-        words = message.split()[:6]
+        words = message.split()[:5]
         title = " ".join(words)
         if len(title) > max_length:
             title = title[:max_length-3] + "..."
@@ -213,4 +204,3 @@ def generate_conversation_id(existing_ids: Optional[List[str]] = None) -> str:
     # Fallback: add timestamp if collisions occur (very unlikely)
     timestamp = str(int(time.time()))[-6:]
     return f"{generate_short_id(length=6)}{timestamp}"
-
