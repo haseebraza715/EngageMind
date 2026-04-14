@@ -8,10 +8,13 @@ The frontend provides the user-facing thesis flow:
 - GPT-2 training trigger and status monitoring.
 
 ## Main Structure
-- `src/pages/*`: route-level screens (login, register, chat, profile).
-- `src/components/Chat/*`: chat container, message view, upload, training panel.
+- `src/pages/*`: route-level auth/profile screens (login, register, profile, reset flows).
+- `src/components/Chat/*`: chat route UI (chat page/container, message view, upload, training panel).
+- `src/components/UI/*`: shared reusable interface primitives.
 - `src/api/*`: Axios clients for backend auth, RAG API, and fine-tune API.
-- `App.js`: route mapping and protected flow entry.
+- `src/services/*`: request orchestration and helper services.
+- `src/constants/*`: API URLs, feature constants, and shared settings.
+- `src/App.js`: route mapping and protected flow entry.
 
 ## Runtime Integration
 ```mermaid
@@ -51,3 +54,4 @@ sequenceDiagram
 ## Design Notes
 - JWT token is the single auth source for all API calls.
 - UI surfaces controlled errors to avoid demo-breaking crashes.
+- `axiosChat` and `axiosFineTune` enforce token presence and redirect to login on `401`.

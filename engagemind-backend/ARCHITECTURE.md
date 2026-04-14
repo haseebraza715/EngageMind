@@ -17,12 +17,15 @@ The backend provides authentication and user management for the thesis app.
 ```mermaid
 flowchart LR
   C["Client"] --> S["Express Server"]
-  S --> A["Auth Routes"]
+  S --> APUB["Auth Routes (public)\n/register /login /forgot /reset"]
+  S --> APRO["Auth Routes (protected)\n/profile /edit-profile"]
   S --> AD["Admin Routes"]
-  A --> M["authMiddleware (JWT)"]
+  APRO --> M["authMiddleware (JWT)"]
   AD --> M
-  AD --> RM["roleMiddleware"]
-  A --> U["User Model (Mongoose)"]
+  AD --> RM["roleMiddleware (admin)"]
+  APUB --> U["User Model (Mongoose)"]
+  APRO --> U
+  AD --> U
   U --> DB["MongoDB"]
 ```
 
@@ -43,3 +46,4 @@ sequenceDiagram
 ## Design Notes
 - New accounts are always stored with `role: user`.
 - On DB outage, backend returns controlled errors instead of hanging requests.
+- Server startup waits for Mongo readiness before listening on `:5003`.

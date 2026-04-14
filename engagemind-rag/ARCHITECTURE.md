@@ -91,3 +91,8 @@ sequenceDiagram
 - Bad responses are captured with structured metadata for triage.
 - ObjectId values are normalized to JSON-safe strings in fine-tune status/result paths.
 - Mongo or Redis outages surface as controlled API errors, not silent failures.
+- For local macOS stability, run the Celery worker with `--pool=solo --concurrency=1`.
+- If training appears stuck, verify Redis reachability and check `celery.log` for task state transitions.
+- If auth-related errors appear across services, verify matching `JWT_SECRET` values between backend and RAG env files.
+- RAG conversation/upload and fine-tune endpoints are authentication-protected; missing/invalid tokens should fail fast.
+- If a user has no uploaded documents, the no-doc handler returns guided responses instead of ungrounded claims.
