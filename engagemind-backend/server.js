@@ -80,9 +80,23 @@ app.post('/test', (req, res) => {
 
 // Use port 5000, but if it's taken by AirPlay, fallback to 5003
 const PORT = process.env.PORT || 5003;
-connectDB();
-app.listen(PORT, () => {
-  console.log(`✅ Server listening on port ${PORT}`);
-  console.log(`✅ API available at http://localhost:${PORT}`);
-  console.log(`✅ Registration endpoint: http://localhost:${PORT}/auth/register`);
-});
+
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const startServer = async () => {
+  let connection = await connectDB();
+
+  while (!connection) {
+    console.warn('⚠️  Waiting for MongoDB before starting HTTP server...');
+    await delay(3000);
+    connection = await connectDB();
+  }
+
+  app.listen(PORT, () => {
+    console.log(`✅ Server listening on port ${PORT}`);
+    console.log(`✅ API available at http://localhost:${PORT}`);
+    console.log(`✅ Registration endpoint: http://localhost:${PORT}/auth/register`);
+  });
+};
+
+startServer();
