@@ -4,11 +4,12 @@ LangGraph conversation workflow for RAG pipeline.
 
 import logging
 import time
+import json
+import re
 from typing import Any, Dict, List, TypedDict
 from dataclasses import dataclass
 
 from langchain_core.documents import Document
-from langchain_mistralai.chat_models import ChatMistralAI
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langgraph.graph import END, StateGraph
 
@@ -18,6 +19,7 @@ from rag.evaluation.evaluator import (
     grade_hallucination,
     grade_answer_relevance,
 )
+from rag.utils.llm_factory import create_chat_llm
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +43,7 @@ class RAGMetrics:
     hallucination_grade: str = ""
     relevance_grade: str = ""
     web_fallback_used: bool = False
+    bad_response: bool = False
     cache_hit: bool = False
 
     def log(self):
@@ -54,7 +57,8 @@ class RAGMetrics:
             f"Docs: {self.docs_after_filter}/{self.docs_retrieved} | "
             f"Hallucination: {self.hallucination_grade} | "
             f"Relevance: {self.relevance_grade} | "
-            f"WebFallback: {self.web_fallback_used}"
+            f"WebFallback: {self.web_fallback_used} | "
+            f"BadResponse: {self.bad_response}"
         )
 
 
@@ -69,6 +73,67 @@ class ConversationState(TypedDict):
     current_message: str
     rewritten_query: str
     metrics: Dict[str, Any]
+
+
+def _extract_source_tags(docs: List[Document]) -> List[str]:
+    tags = []
+    for idx, doc in enumerate(docs):
+        source = doc.metadata.get("source", f"Document {idx+1}")
+        if "/" in source:
+            source = source.split("/")[-1]
+        if "\\" in source:
+            source = source.split("\\")[-1]
+        tags.append(f"[source:{source}#chunk{idx+1}]")
+    return tags
+
+
+def _llm_metadata(llm: Any) -> Dict[str, str]:
+    provider = getattr(llm, "_engagemind_provider", "unknown")
+    model = getattr(llm, "_engagemind_model", None)
+    if not model:
+        model = getattr(llm, "model", None) or getattr(llm, "model_name", None) or "unknown"
+    return {"provider": str(provider), "model": str(model)}
+
+
+def _is_bad_response(answer: str, metrics: Dict[str, Any]) -> bool:
+    lower = (answer or "").lower()
+    fallback_markers = [
+        "sorry, i encountered an error",
+        "i encountered an issue processing your request",
+        "i could not find this in the uploaded documents",
+        "no supporting evidence found in provided context",
+    ]
+    is_error_like = any(marker in lower for marker in fallback_markers)
+    hallucination_bad = metrics.get("hallucination_grade") == "no"
+    relevance_bad = metrics.get("relevance_grade") == "no"
+    return is_error_like or hallucination_bad or relevance_bad
+
+
+def _invoke_with_retry(chain: Any, prompt_input: Dict[str, Any], max_attempts: int = 2) -> Any:
+    """
+    Invoke generation chain with a small retry budget to reduce transient provider errors.
+    """
+    last_error = None
+    for attempt in range(1, max_attempts + 1):
+        try:
+            return chain.invoke(prompt_input)
+        except Exception as exc:
+            last_error = exc
+            logger.warning("[GENERATE] LLM invoke attempt %s/%s failed: %s", attempt, max_attempts, exc)
+            if attempt < max_attempts:
+                time.sleep(0.75 * attempt)
+    raise last_error
+
+
+def _humanize_answer_citations(answer: str) -> str:
+    """
+    Keep citations visible but remove raw chunk IDs from user-facing text.
+    Example:
+      [source:file.pdf#chunk1] -> [source:file.pdf]
+    """
+    if not answer:
+        return answer
+    return re.sub(r"\[source:([^\]#]+)#chunk\d+\]", r"[source:\1]", answer)
 
 
 # ============================================================================
@@ -263,6 +328,7 @@ def generate_response(state: dict, llm, retrieval_chain, tavily=None, skip_quali
     rewritten_query = state.get("rewritten_query", current_message)
     messages = state.get("messages", [])
     metrics = state.get("metrics", {})
+    docs: List[Document] = []
 
     # Build conversation history
     conversation_history = "\n".join(
@@ -292,7 +358,7 @@ def generate_response(state: dict, llm, retrieval_chain, tavily=None, skip_quali
 
         # Generate response
         start_time = time.time()
-        response = chain.invoke(prompt_input)
+        response = _invoke_with_retry(chain, prompt_input, max_attempts=2)
 
         # Extract answer from response
         if hasattr(response, 'content'):
@@ -323,6 +389,9 @@ def generate_response(state: dict, llm, retrieval_chain, tavily=None, skip_quali
         logger.exception(f"[GENERATE] Error for user {user_id}: {e}")
         answer = "Sorry, I encountered an error. Please try again."
 
+    raw_answer = answer
+    answer = _humanize_answer_citations(raw_answer)
+
     # Add assistant message to state
     state["messages"].append({
         "sender": "assistant",
@@ -338,6 +407,30 @@ def generate_response(state: dict, llm, retrieval_chain, tavily=None, skip_quali
         metrics.get("generation_time_ms", 0)
     )
     metrics["total_time_ms"] = total_time
+    metrics["bad_response"] = _is_bad_response(raw_answer, metrics)
+    metrics["retrieved_sources"] = _extract_source_tags(docs)
+    metrics["llm"] = _llm_metadata(llm)
+
+    if metrics["bad_response"]:
+        logger.warning(
+            "[BAD_RESPONSE] %s",
+            json.dumps(
+                {
+                    "user_id": user_id,
+                    "query": current_message,
+                    "rewritten_query": rewritten_query,
+                    "answer": answer,
+                    "raw_answer": raw_answer,
+                    "retrieved_sources": metrics.get("retrieved_sources", []),
+                    "hallucination_grade": metrics.get("hallucination_grade"),
+                    "relevance_grade": metrics.get("relevance_grade"),
+                    "web_fallback_used": metrics.get("web_fallback_used", False),
+                    "provider": metrics.get("llm", {}).get("provider"),
+                    "model": metrics.get("llm", {}).get("model"),
+                },
+                ensure_ascii=False,
+            ),
+        )
 
     # Log metrics
     rag_metrics = RAGMetrics(
@@ -352,7 +445,8 @@ def generate_response(state: dict, llm, retrieval_chain, tavily=None, skip_quali
         docs_after_filter=metrics.get("docs_after_filter", 0),
         hallucination_grade=metrics.get("hallucination_grade", ""),
         relevance_grade=metrics.get("relevance_grade", ""),
-        web_fallback_used=metrics.get("web_fallback_used", False)
+        web_fallback_used=metrics.get("web_fallback_used", False),
+        bad_response=metrics.get("bad_response", False),
     )
     rag_metrics.log()
 
@@ -367,7 +461,7 @@ def generate_response(state: dict, llm, retrieval_chain, tavily=None, skip_quali
 def build_conversation_graph(api_key: str, retrieval_chain_factory, tavily=None, skip_quality_checks: bool = True):
     """Build the LangGraph conversation workflow."""
     workflow = StateGraph(ConversationState)
-    llm = ChatMistralAI(mistral_api_key=api_key)
+    llm = create_chat_llm(mistral_api_key=api_key, purpose="chat")
 
     # Add nodes
     workflow.add_node(
