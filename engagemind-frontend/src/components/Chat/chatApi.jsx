@@ -137,6 +137,10 @@ export async function startFineTuneTraining() {
       throw new Error('Authentication required. Please log in to start training.');
     }
 
+    if (!error.response) {
+      throw new Error(`Unable to reach fine-tune service (possible network/CORS issue): ${error.message}`);
+    }
+
     throw new Error(error.response?.data?.message || 'Failed to start training');
   }
 }
