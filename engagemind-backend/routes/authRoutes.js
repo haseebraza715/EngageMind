@@ -325,6 +325,8 @@ router.get('/google', (req, res, next) => {
       help: 'Get credentials from: https://console.cloud.google.com/apis/credentials'
     });
   }
+
+  if (!requireDbConnection(res)) return;
   
   // Log the authentication attempt
   console.log('Google OAuth: Initiating authentication...');
@@ -365,33 +367,44 @@ router.get('/google', (req, res, next) => {
 });
 
 // Google Callback
-router.get('/google/callback', 
-  passport.authenticate('google', { 
-    session: false, 
-    failureRedirect: 'http://localhost:3000/login?error=google_auth_failed' 
-  }), 
-  (req, res) => {
-    try {
-      if (!req.user) {
-        console.error('Google OAuth callback: No user in request');
-        return res.redirect('http://localhost:3000/login?error=no_user');
-      }
-      
-      const payload = {
-        userId: req.user._id,
-        username: req.user.username,
-        role: req.user.role
-      };
-
-      const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1h' });
-      console.log('Google OAuth: User authenticated successfully, redirecting...');
-      res.redirect(`http://localhost:3000/auth-success?token=${token}`);
-    } catch (error) {
-      console.error('Google callback error:', error);
-      res.redirect('http://localhost:3000/login?error=token_generation_failed');
+router.get('/google/callback', (req, res, next) => {
+  passport.authenticate('google', { session: false }, (err, user, info) => {
+    if (err) {
+      console.error('Google OAuth callback error:', err.message);
+      return res.redirect('http://localhost:3000/login?error=google_auth_error');
     }
+
+    if (!user) {
+      const code = info && info.code === 'DB_UNAVAILABLE'
+        ? 'database_unavailable'
+        : 'google_auth_failed';
+      return res.redirect(`http://localhost:3000/login?error=${code}`);
+    }
+
+    req.user = user;
+    return next();
+  })(req, res, next);
+}, (req, res) => {
+  try {
+    if (!req.user) {
+      console.error('Google OAuth callback: No user in request');
+      return res.redirect('http://localhost:3000/login?error=no_user');
+    }
+
+    const payload = {
+      userId: req.user._id,
+      username: req.user.username,
+      role: req.user.role
+    };
+
+    const token = jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1h' });
+    console.log('Google OAuth: User authenticated successfully, redirecting...');
+    res.redirect(`http://localhost:3000/auth-success?token=${token}`);
+  } catch (error) {
+    console.error('Google callback error:', error);
+    res.redirect('http://localhost:3000/login?error=token_generation_failed');
   }
-);
+});
 
 
 
