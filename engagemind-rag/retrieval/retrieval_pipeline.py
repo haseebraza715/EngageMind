@@ -17,13 +17,13 @@ from cachetools import TTLCache
 
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough, RunnableLambda
-from langchain_mistralai.chat_models import ChatMistralAI
 from langchain_mistralai.embeddings import MistralAIEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_core.retrievers import BaseRetriever
 from langchain_core.documents import Document
 
 from rag.config import FAISS_INDEX_ROOT, MISTRAL_API_KEY
+from rag.utils.llm_factory import create_chat_llm
 
 logger = logging.getLogger(__name__)
 
@@ -171,42 +171,30 @@ def safe_load_faiss(
 
 
 # ============================================================================
-# IMPROVED PROMPT TEMPLATE - Conversational and User-Friendly
+# ANSWER PROMPT - Grounded, Citation-Strict Contract
 # ============================================================================
 
 RETRIEVAL_PROMPT = ChatPromptTemplate.from_template(
-"""You are a friendly, knowledgeable AI assistant helping users understand their documents.
+"""You are a document-grounded assistant.
 
-FORMATTING RULES (CRITICAL - Follow exactly):
-1. **Headings**: Use ## for main sections, ### for subsections
-2. **Lists**: Use - for bullets, 1. 2. 3. for numbered lists
-3. **Bold**: Use **text** for key terms and important concepts
-4. **Code**: Use `code` for technical terms, formulas, or examples
-5. **Tables**: Use markdown tables for comparisons (| Header | Header |)
-6. **Spacing**: Add blank lines between sections for readability
-7. **Emojis**: Use 1-2 relevant emojis max (not in every line)
-
-STRUCTURE FOR ANSWERS:
-- Start with a brief direct answer (1-2 sentences)
-- Add a blank line
-- Then expand with details using headings, lists, or tables
-- For complex topics: use ## headings to separate sections
-- End with "Need more details? Ask away!" if answer is incomplete
-
-CONTENT RULES:
-- Answer ONLY from provided documents
-- If not in docs: "I couldn't find that in your uploaded documents."
-- Cite sources naturally: "According to [source name]..."
-- For "what's in this": give structured overview with headings
+Follow this exact response contract:
+1. Start with `Direct answer:` on one line, then give a concise answer (1-3 sentences).
+2. Then output a section header `Evidence:`.
+3. Under `Evidence:`, provide bullet points where EACH factual claim includes one citation tag.
+4. Citation format is STRICT: [source:<filename>#chunk<id>]
+5. Use only citation tags that already appear in the provided context.
+6. If the context does not support the answer, say:
+   `I could not find this in the uploaded documents.`
+   Then add `Evidence:` with `- No supporting evidence found in provided context.`
+7. Do not invent facts, citations, file names, chunk ids, or metadata.
+8. Keep output concise and avoid filler text.
 
 {conversation_history}
 
 Documents:
 {context}
 
-Question: {input}
-
-Well-formatted response:"""
+Question: {input}"""
 )
 
 
@@ -312,9 +300,9 @@ def build_retrieval_chain(
     retriever = SimpleRetriever(base_retriever)
 
     # Create LLM for generation
-    model = ChatMistralAI(mistral_api_key=api_key)
+    model = create_chat_llm(mistral_api_key=api_key, purpose="chat")
 
-    # Helper to format documents with sources (cleaner format)
+    # Helper to format documents with strict source tags for citation use.
     def format_docs_with_sources(docs: List[Document]) -> str:
         if not docs:
             return "No relevant documents found."
@@ -322,14 +310,19 @@ def build_retrieval_chain(
         formatted = []
         for i, doc in enumerate(docs):
             source = doc.metadata.get("source", f"Document {i+1}")
-            # Clean up the source name - remove path, keep just filename
+            # Clean source name to filename only for stable citation tags.
             if "/" in source:
                 source = source.split("/")[-1]
             if "\\" in source:
                 source = source.split("\\")[-1]
 
-            # Format: "From [filename]: content"
-            formatted.append(f"From {source}:\n{doc.page_content}")
+            citation_tag = f"[source:{source}#chunk{i+1}]"
+            formatted.append(
+                f"{citation_tag}\n"
+                f"Source: {source}\n"
+                f"Chunk: {i+1}\n"
+                f"Content:\n{doc.page_content}"
+            )
 
         return "\n\n---\n\n".join(formatted)
 
