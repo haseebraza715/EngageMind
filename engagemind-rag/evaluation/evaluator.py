@@ -42,6 +42,7 @@ CHITCHAT_PATTERNS = [
     r'^(yes|no|yeah|nope|yep|nah)[\s!.,?]*$',
     r'^(good morning|good afternoon|good evening|good night)[\s!.,?]*$',
     r'^(how are you|how\'s it going|what\'s up|sup)[\s!.,?]*$',
+    r'^(yo[\s!.,?]+)?(what\'s up|whats up|what up|sup)[\s!.,?]*$',
     r'^(nice|great|awesome|cool|perfect|sweet)[\s!.,?]*$',
     r'^(no problem|np|no worries|nw|anytime|any time)[\s!.,?]*$',
     r'^(sure thing|you bet|of course|absolutely)[\s!.,?]*$',
@@ -53,6 +54,13 @@ CHITCHAT_PATTERNS = [
 
 # Compile patterns for efficiency
 _chitchat_regex = [re.compile(p, re.IGNORECASE) for p in CHITCHAT_PATTERNS]
+
+# Meta capability/help queries that should NOT trigger document-grounded answer formatting.
+_CAPABILITY_QUERY_PATTERNS = [
+    re.compile(r'^\s*(what can you do|what do you do)\s*[\?!.]*\s*$', re.IGNORECASE),
+    re.compile(r'^\s*(how can you help( me)?|can you help( me)?)\s*[\?!.]*\s*$', re.IGNORECASE),
+    re.compile(r'^\s*(how do you work|what are your capabilities)\s*[\?!.]*\s*$', re.IGNORECASE),
+]
 
 # Fuzzy match patterns for typo tolerance
 _FUZZY_GREETINGS = ["hi", "hello", "hey", "hola"]
@@ -90,6 +98,7 @@ CHITCHAT_RESPONSES = {
         "Anytime you need help!"
     ],
     "how_are_you": "I'm doing well, thank you for asking! I'm here to help you explore and understand your documents. What would you like to know?",
+    "capabilities": "I can help you understand your uploaded documents: summarize them, answer specific questions, extract key facts, compare sections, and find evidence-backed details.",
     "default": "I'm here to help you with questions about your uploaded documents. What would you like to know?"
 }
 
@@ -112,6 +121,11 @@ def detect_intent(message: str, conversation_history: Optional[List[Dict[str, An
     # Check if it's empty
     if not message:
         return ("chitchat", CHITCHAT_RESPONSES["default"])
+
+    # Capability/meta-help queries should get conversational response, not RAG formatting.
+    for pattern in _CAPABILITY_QUERY_PATTERNS:
+        if pattern.match(message):
+            return ("chitchat", CHITCHAT_RESPONSES["capabilities"])
 
     # Context-aware: Check if this is acknowledgment after assistant response
     if conversation_history and len(conversation_history) >= 1:
@@ -152,7 +166,7 @@ def detect_intent(message: str, conversation_history: Optional[List[Dict[str, An
                 return ("chitchat", random.choice(responses))
             elif any(a in message for a in ["ok", "okay", "sure", "alright", "got it", "understood", "yes", "no", "yeah", "nope", "kk", "k", "okie", "okok"]):
                 return ("chitchat", CHITCHAT_RESPONSES["acknowledgment"])
-            elif any(h in message for h in ["how are you", "how's it going", "what's up", "sup"]):
+            elif any(h in message for h in ["how are you", "how's it going", "what's up", "whats up", "what up", "sup"]):
                 return ("chitchat", CHITCHAT_RESPONSES["how_are_you"])
             else:
                 return ("chitchat", CHITCHAT_RESPONSES["default"])
@@ -201,21 +215,78 @@ def get_chitchat_response(message: str) -> Optional[str]:
 # This prevents duplicate LLM calls for the same question
 _query_rewrite_cache: TTLCache = TTLCache(maxsize=500, ttl=600)
 
+
+def _parse_prefixed_line(text: str, key: str) -> Optional[str]:
+    """
+    Parse a strict `KEY: value` line from model output.
+    """
+    pattern = rf"{re.escape(key)}\s*:\s*(.+)"
+    match = re.search(pattern, text, flags=re.IGNORECASE)
+    if not match:
+        return None
+    value = match.group(1).strip()
+    return value if value else None
+
+
+def _parse_yes_no_grade(text: str, default: str = "no") -> str:
+    """
+    Parse deterministic grading output from model response.
+    Expected:
+      RESULT: YES
+      RESULT: NO
+    """
+    parsed = _parse_prefixed_line(text, "RESULT")
+    if parsed:
+        normalized = parsed.lower()
+        if normalized.startswith("yes"):
+            return "yes"
+        if normalized.startswith("no"):
+            return "no"
+
+    lowered = text.lower()
+    if re.search(r"\byes\b", lowered) and not re.search(r"\bno\b", lowered):
+        return "yes"
+    if re.search(r"\bno\b", lowered):
+        return "no"
+    return default
+
+
+def _parse_relevance_grade(text: str, default: str = "irrelevant") -> str:
+    """
+    Parse deterministic document relevance output.
+    Expected:
+      RESULT: RELEVANT
+      RESULT: IRRELEVANT
+    """
+    parsed = _parse_prefixed_line(text, "RESULT")
+    if parsed:
+        normalized = parsed.lower()
+        if normalized.startswith("relevant") and not normalized.startswith("irrelevant"):
+            return "relevant"
+        if normalized.startswith("irrelevant"):
+            return "irrelevant"
+
+    lowered = text.lower()
+    if re.search(r"\birrelevant\b", lowered):
+        return "irrelevant"
+    if re.search(r"\brelevant\b", lowered):
+        return "relevant"
+    return default
+
+
 REWRITE_PROMPT = ChatPromptTemplate.from_messages([
-    ("system", """You are a search query optimizer. Your task is to rewrite user questions to improve document retrieval.
+    ("system", """You optimize user questions for semantic retrieval.
 
-RULES:
-1. Make the question more specific and search-friendly
-2. Expand abbreviations and acronyms
-3. Include relevant synonyms or related terms
-4. Remove filler words and conversational elements
-5. Keep the core intent intact
-6. Output ONLY the rewritten query, nothing else
-
-Example:
-Original: "how do I do that thing with the API?"
-Rewritten: "API integration implementation guide usage examples"""),
-    ("human", "Original question: {question}\n\nRewritten query:")
+Rules:
+1. Preserve all named entities, numbers, dates, constraints, and intent.
+2. Keep language close to the original question. Do NOT change meaning.
+3. Expand abbreviations only when unambiguous.
+4. Remove filler words and conversational fluff.
+5. Keep output concise and search-oriented.
+6. Output exactly one line in this format:
+   REWRITE_QUERY: <rewritten query>
+7. If rewrite is unnecessary, return the original question with the same format."""),
+    ("human", "Original question:\n{question}")
 ])
 
 def _get_query_hash(question: str) -> str:
@@ -251,7 +322,8 @@ def rewrite_query(question: str, llm, use_cache: bool = True) -> str:
 
     try:
         chain = REWRITE_PROMPT | llm | StrOutputParser()
-        improved = chain.invoke({"question": question}).strip()
+        raw_output = chain.invoke({"question": question}).strip()
+        improved = _parse_prefixed_line(raw_output, "REWRITE_QUERY") or raw_output
 
         # Validate the rewrite isn't empty or too different
         if not improved or len(improved) < 5:
@@ -286,7 +358,10 @@ GRADING CRITERIA:
 - "no" = The answer contains information NOT found in the context
 
 Be strict: if ANY part of the answer is not supported by the context, grade "no".
-Respond with ONLY "yes" or "no"."""),
+Respond using EXACTLY one line:
+RESULT: YES
+or
+RESULT: NO"""),
     ("human", """<context>
 {context}
 </context>
@@ -325,20 +400,13 @@ def grade_hallucination(docs: List[Document], answer: str, llm, max_context_len:
         chain = HALLUCINATION_PROMPT | llm | StrOutputParser()
         result = chain.invoke({"context": context, "answer": answer}).strip().lower()
 
-        # Parse response - look for yes/no anywhere in response
-        if "yes" in result and "no" not in result:
-            grade = "yes"
-        elif "no" in result:
-            grade = "no"
-        else:
-            logger.warning(f"[HALLUCINATION] Unexpected result: {result}")
-            grade = "yes"  # Default to safe
+        grade = _parse_yes_no_grade(result, default="no")
 
         logger.info(f"[HALLUCINATION] Grade: {grade}")
         return grade
     except Exception as e:
         logger.warning(f"[HALLUCINATION] Grading failed: {e}")
-        return "yes"  # Assume safe if uncertain
+        return "no"
 
 
 # ============================================================================
@@ -352,7 +420,10 @@ GRADING CRITERIA:
 - "yes" = The answer directly addresses the question and provides useful information
 - "no" = The answer is off-topic, too vague, or doesn't help the user
 
-Respond with ONLY "yes" or "no"."""),
+Respond using EXACTLY one line:
+RESULT: YES
+or
+RESULT: NO"""),
     ("human", """<question>
 {question}
 </question>
@@ -383,20 +454,13 @@ def grade_answer_relevance(question: str, answer: str, llm) -> str:
         chain = ANSWER_RELEVANCE_PROMPT | llm | StrOutputParser()
         result = chain.invoke({"question": question, "answer": answer}).strip().lower()
 
-        # Parse response
-        if "yes" in result and "no" not in result:
-            grade = "yes"
-        elif "no" in result:
-            grade = "no"
-        else:
-            logger.warning(f"[RELEVANCE] Unexpected result: {result}")
-            grade = "yes"
+        grade = _parse_yes_no_grade(result, default="no")
 
         logger.info(f"[RELEVANCE] Grade: {grade}")
         return grade
     except Exception as e:
         logger.warning(f"[RELEVANCE] Grading failed: {e}")
-        return "yes"  # Assume safe if unsure
+        return "no"
 
 
 # ============================================================================
@@ -410,7 +474,10 @@ GRADING:
 - "relevant" = Document contains information useful for answering the query
 - "irrelevant" = Document is off-topic or doesn't help answer the query
 
-Respond with ONLY "relevant" or "irrelevant"."""),
+Respond using EXACTLY one line:
+RESULT: RELEVANT
+or
+RESULT: IRRELEVANT"""),
     ("human", """<query>
 {query}
 </query>
@@ -441,10 +508,7 @@ def grade_document_relevance(query: str, doc: Document, llm) -> str:
         chain = DOC_RELEVANCE_PROMPT | llm | StrOutputParser()
         result = chain.invoke({"query": query, "document": doc_content}).strip().lower()
 
-        if "relevant" in result and "irrelevant" not in result:
-            grade = "relevant"
-        else:
-            grade = "irrelevant"
+        grade = _parse_relevance_grade(result, default="irrelevant")
 
         source = doc.metadata.get("source", "unknown")
         logger.debug(f"[DOC_RELEVANCE] {source}: {grade}")
@@ -495,15 +559,19 @@ BATCH_DOC_RELEVANCE_PROMPT = ChatPromptTemplate.from_messages([
     ("system", """You are a document relevance grader. Given a query and multiple documents, determine which documents are relevant.
 
 OUTPUT FORMAT:
-Return ONLY a comma-separated list of document numbers that are relevant.
-If none are relevant, return "none".
-If all are relevant, return "all".
+Return EXACTLY one line:
+RESULT: <value>
+
+Allowed values:
+- all
+- none
+- comma-separated document numbers like 1,3,4
 
 Example outputs:
-- "1,3,4" (documents 1, 3, and 4 are relevant)
-- "all" (all documents are relevant)
-- "none" (no documents are relevant)
-- "2" (only document 2 is relevant)"""),
+- RESULT: 1,3,4
+- RESULT: all
+- RESULT: none
+- RESULT: 2"""),
     ("human", """<query>
 {query}
 </query>
@@ -549,7 +617,9 @@ def batch_filter_documents(query: str, docs: List[Document], llm) -> List[Docume
 
         # Single LLM call
         chain = BATCH_DOC_RELEVANCE_PROMPT | llm | StrOutputParser()
-        result = chain.invoke({"query": query, "documents": documents_str}).strip().lower()
+        raw_result = chain.invoke({"query": query, "documents": documents_str}).strip()
+        parsed_result = _parse_prefixed_line(raw_result, "RESULT")
+        result = (parsed_result or raw_result).strip().lower()
 
         logger.debug(f"[BATCH_FILTER] LLM response: {result}")
 
@@ -561,7 +631,9 @@ def batch_filter_documents(query: str, docs: List[Document], llm) -> List[Docume
 
         # Parse comma-separated numbers
         relevant_indices = []
-        for part in result.replace(" ", "").split(","):
+        normalized = result.replace(" ", "")
+        normalized = re.sub(r"[^0-9,]", "", normalized)
+        for part in normalized.split(","):
             try:
                 idx = int(part) - 1  # Convert to 0-indexed
                 if 0 <= idx < len(docs):
@@ -570,7 +642,7 @@ def batch_filter_documents(query: str, docs: List[Document], llm) -> List[Docume
                 continue
 
         if not relevant_indices:
-            logger.warning(f"[BATCH_FILTER] Could not parse result: {result}")
+            logger.warning(f"[BATCH_FILTER] Could not parse result: {raw_result}")
             return docs[:2]  # Fallback to first 2
 
         relevant_docs = [docs[i] for i in relevant_indices]
