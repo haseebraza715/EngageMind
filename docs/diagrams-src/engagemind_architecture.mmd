@@ -1,0 +1,45 @@
+%% EngageMind system architecture (source of truth)
+flowchart LR
+  %% Clients
+  U[User]
+  FE[React Frontend\n:3000]
+
+  %% Services
+  BE[Auth Backend\nNode.js + Express\n:5003]
+  RAG[RAG API\nPython + Flask\n:5001]
+  FT[Fine-Tune API\nPython + Flask\n:5002]
+  CW[Celery Worker\nGPT-2 LoRA jobs]
+
+  %% Stores and external systems
+  MDB[(MongoDB\n:27017)]
+  REDIS[(Redis\n:6379)]
+  FAISS[(FAISS Index\nper-user)]
+  MISTRAL[[Mistral API]]
+  TAVILY[[Tavily API]]
+
+  U --> FE
+  FE -->|/auth/*| BE
+  FE -->|/api/conversation/*\n/api/upload| RAG
+  FE -->|/api/fine-tune*| FT
+
+  BE --> MDB
+
+  RAG --> MDB
+  RAG --> FAISS
+  RAG --> MISTRAL
+  RAG --> TAVILY
+
+  FT --> MDB
+  FT --> REDIS
+  REDIS --> CW
+  CW --> MDB
+
+  classDef client fill:#dbeafe,stroke:#1d4ed8,color:#1e3a8a,stroke-width:1px;
+  classDef svc fill:#dcfce7,stroke:#166534,color:#14532d,stroke-width:1px;
+  classDef data fill:#fef3c7,stroke:#92400e,color:#78350f,stroke-width:1px;
+  classDef ext fill:#f3e8ff,stroke:#6b21a8,color:#581c87,stroke-width:1px;
+
+  class U,FE client;
+  class BE,RAG,FT,CW svc;
+  class MDB,REDIS,FAISS data;
+  class MISTRAL,TAVILY ext;

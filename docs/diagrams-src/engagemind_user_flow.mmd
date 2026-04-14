@@ -1,0 +1,31 @@
+%% EngageMind user interaction flow (source of truth)
+flowchart TB
+  START([Start]) --> FE[Open frontend :3000]
+  FE --> AUTH{Authenticated?}
+
+  AUTH -->|No| REGISTER[Register]
+  REGISTER --> LOGIN[Login / OAuth]
+  AUTH -->|Yes| CHAT[Open chat workspace]
+  LOGIN --> CHAT
+
+  CHAT --> DOCQ{Upload document?}
+  DOCQ -->|Yes| INTAKE[Upload + ingest + index]
+  DOCQ -->|No| ASK[Send question]
+  INTAKE --> ASK
+  ASK --> RESP[Receive grounded answer]
+
+  CHAT --> FTQ{Start GPT-2 training?}
+  FTQ -->|Yes| FTASK[Submit fine-tune task]
+  FTASK --> FSTAT[Track status until completed]
+  FTQ -->|No| END([End])
+
+  RESP --> END
+  FSTAT --> END
+
+  classDef decision fill:#fee2e2,stroke:#b91c1c,color:#7f1d1d,stroke-width:1px;
+  classDef action fill:#e0f2fe,stroke:#0c4a6e,color:#082f49,stroke-width:1px;
+  classDef state fill:#dcfce7,stroke:#166534,color:#14532d,stroke-width:1px;
+
+  class AUTH,DOCQ,FTQ decision;
+  class FE,REGISTER,LOGIN,CHAT,INTAKE,ASK,RESP,FTASK,FSTAT action;
+  class START,END state;
