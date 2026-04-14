@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import jwt
+from bson import ObjectId
 
 # Ensure required env vars exist before importing app modules.
 os.environ.setdefault("MISTRAL_API_KEY", "test-mistral-key")
@@ -77,11 +78,30 @@ def test_status_mapping_contract():
                 assert payload["state"] == expected_status
 
 
+def test_status_success_serializes_objectid_in_result():
+    success_with_objectid = SimpleNamespace(
+        state="SUCCESS",
+        info=None,
+        result={"_id": ObjectId(), "output_dir": "./models/u/gpt2-lora", "trained_samples": 2},
+    )
+
+    with app.test_client() as client, patch(
+        "fine_tune.fine_tune_app.celery_app.AsyncResult", return_value=success_with_objectid
+    ):
+        response = client.get("/api/fine-tune/status/task-oid", headers=_auth_header())
+        assert response.status_code == 200
+        payload = response.get_json()
+        assert payload["status"] == "SUCCESS"
+        assert isinstance(payload["result"].get("_id"), str)
+        assert payload["result"]["_id"]
+
+
 def run_all_tests():
     tests = [
         ("start requires corpus", test_start_fine_tune_requires_corpus),
         ("start success contract", test_start_fine_tune_success_contract),
         ("status mapping contract", test_status_mapping_contract),
+        ("status serializes ObjectId result", test_status_success_serializes_objectid_in_result),
     ]
 
     passed = 0
