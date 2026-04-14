@@ -24,6 +24,7 @@ from rag.server.handlers.upload_handler import handle_document_upload
 from rag.server.handlers import conversation_handler as conversation_handler_module
 from rag.server.handlers import message_handler as message_handler_module
 from rag.server.handlers import upload_handler as upload_handler_module
+from rag.evaluation.evaluator import detect_intent
 
 
 class FakeResult:
@@ -273,6 +274,25 @@ def test_chitchat_route_bypasses_rag_pipeline():
     assert len(convo["messages"]) == 2
 
 
+def test_capability_query_routes_to_chitchat():
+    intent, response = detect_intent("how can you help me?")
+    assert intent == "chitchat"
+    assert isinstance(response, str)
+    assert "uploaded documents" in response.lower()
+
+
+def test_capability_plus_task_stays_document_query():
+    intent, response = detect_intent("How can you help me summarize section 3 of my PDF?")
+    assert intent == "document_query"
+    assert response is None
+
+
+def test_colloquial_greeting_routes_to_chitchat():
+    intent, response = detect_intent("yo what up")
+    assert intent == "chitchat"
+    assert isinstance(response, str)
+
+
 def test_conversation_crud_contract():
     db = FakeDB()
 
@@ -324,6 +344,9 @@ def run_all_tests():
         ("No-doc message flow avoids duplicate user message", test_handle_message_no_docs_no_duplicate_user_message),
         ("Message validation paths", test_handle_message_validation_paths),
         ("Chitchat route bypasses RAG", test_chitchat_route_bypasses_rag_pipeline),
+        ("Capability query routes to chitchat", test_capability_query_routes_to_chitchat),
+        ("Capability with task stays document query", test_capability_plus_task_stays_document_query),
+        ("Colloquial greeting routes to chitchat", test_colloquial_greeting_routes_to_chitchat),
         ("Conversation CRUD contract", test_conversation_crud_contract),
         ("Upload handler txt success contract", test_upload_handler_success_txt_contract),
     ]
