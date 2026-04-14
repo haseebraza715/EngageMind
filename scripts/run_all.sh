@@ -54,6 +54,41 @@ port_owner() {
   lsof -iTCP:"${port}" -sTCP:LISTEN -n -P 2>/dev/null | awk 'NR==2 {print $1 " (pid=" $2 ")"}'
 }
 
+read_jwt_secret() {
+  local env_file="$1"
+  if [[ ! -f "${env_file}" ]]; then
+    return 0
+  fi
+
+  local raw
+  raw="$(grep -E '^[[:space:]]*JWT_SECRET[[:space:]]*=' "${env_file}" | head -n 1 | sed -E 's/^[[:space:]]*JWT_SECRET[[:space:]]*=[[:space:]]*//')"
+  raw="$(echo "${raw}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//; s/^"(.*)"$/\1/; s/^\x27(.*)\x27$/\1/')"
+  echo "${raw}"
+}
+
+warn_on_jwt_mismatch() {
+  local backend_env="${BACKEND_DIR}/.env"
+  local rag_env="${RAG_DIR}/.env"
+  local backend_jwt
+  local rag_jwt
+
+  backend_jwt="$(read_jwt_secret "${backend_env}")"
+  rag_jwt="$(read_jwt_secret "${rag_env}")"
+
+  if [[ -z "${backend_jwt}" || -z "${rag_jwt}" ]]; then
+    return 0
+  fi
+
+  if [[ "${backend_jwt}" != "${rag_jwt}" ]]; then
+    echo "Warning: JWT_SECRET mismatch between backend and RAG env files."
+    echo "Google/local login may succeed, but chat/fine-tune APIs can return 401 and force logout."
+    echo "Align JWT_SECRET in:"
+    echo "  ${backend_env}"
+    echo "  ${rag_env}"
+    echo
+  fi
+}
+
 declare -a PIDS=()
 ALREADY_CLEANED_UP="false"
 
@@ -114,6 +149,8 @@ echo "Launcher root: ${THESIS_DIR}"
 echo "Logs: ${LOG_DIR}"
 echo
 
+warn_on_jwt_mismatch
+
 if [[ "$(port_open 27017)" != "open" ]]; then
   echo "Warning: MongoDB (localhost:27017) is not reachable."
   echo "Backend/RAG will start, but auth/data operations will return database unavailable errors."
@@ -130,14 +167,14 @@ fi
 if [[ "$(port_open 5001)" == "open" ]]; then
   echo "Port 5001 already in use by $(port_owner 5001), skipping RAG API start."
 else
-  start_service "rag-api" "${RAG_DIR}" "${LOG_DIR}/rag.log" env DEBUG=false "${RAG_DIR}/.venv/bin/python" main.py
+  start_service "rag-api" "${RAG_DIR}" "${LOG_DIR}/rag.log" env DEBUG=false KMP_DUPLICATE_LIB_OK=TRUE OMP_NUM_THREADS=1 "${RAG_DIR}/.venv/bin/python" main.py
   wait_for_port 5001 "rag-api" 25 || true
 fi
 
 if [[ "$(port_open 5002)" == "open" ]]; then
   echo "Port 5002 already in use by $(port_owner 5002), skipping fine-tune API start."
 else
-  start_service "fine-tune-api" "${RAG_DIR}" "${LOG_DIR}/fine-tune.log" env FINE_TUNE_DEBUG=false "${RAG_DIR}/.venv/bin/python" fine_tune/fine_tune_app.py
+  start_service "fine-tune-api" "${RAG_DIR}" "${LOG_DIR}/fine-tune.log" env FINE_TUNE_DEBUG=false KMP_DUPLICATE_LIB_OK=TRUE OMP_NUM_THREADS=1 "${RAG_DIR}/.venv/bin/python" fine_tune/fine_tune_app.py
   wait_for_port 5002 "fine-tune-api" 20 || true
 fi
 
@@ -145,7 +182,8 @@ if [[ "$(port_open 6379)" != "open" ]]; then
   echo "Warning: Redis (localhost:6379) is not reachable."
   echo "Fine-tune API can start, but training tasks will fail until Redis is running."
 elif [[ -x "${RAG_DIR}/.venv/bin/celery" ]]; then
-  start_service "celery-worker" "${RAG_DIR}" "${LOG_DIR}/celery.log" "${RAG_DIR}/.venv/bin/celery" -A fine_tune.celery_config.app worker --loglevel=info
+  # Use solo pool locally to avoid prefork + torch segmentation faults on macOS.
+  start_service "celery-worker" "${RAG_DIR}" "${LOG_DIR}/celery.log" env KMP_DUPLICATE_LIB_OK=TRUE OMP_NUM_THREADS=1 "${RAG_DIR}/.venv/bin/celery" -A fine_tune.celery_config.app worker --pool=solo --concurrency=1 --loglevel=info
 else
   echo "Warning: Celery binary not found in ${RAG_DIR}/.venv/bin/celery; worker not started."
 fi
