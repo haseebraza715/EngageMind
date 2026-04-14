@@ -80,12 +80,14 @@ celery -A fine_tune.celery_config.app worker --pool=solo --concurrency=1 --logle
 ## API Endpoints
 ### RAG
 - `GET /api/health`
+- `POST /api/ask` (legacy single-question endpoint)
 - `POST /api/upload`
 - `POST /api/conversation`
 - `GET /api/conversations`
 - `GET /api/conversation/<conversation_id>`
 - `POST /api/conversation/<conversation_id>/message`
 - `DELETE /api/conversation/<conversation_id>`
+- `GET /api/index/stats`
 
 ### Fine-Tune
 - `POST /api/fine-tune`

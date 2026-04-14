@@ -364,3 +364,29 @@ Files updated in this pass:
 - EngageMind/engagemind-frontend/ARCHITECTURE.md
 - EngageMind/engagemind-rag/README.md
 - EngageMind/engagemind-rag/ARCHITECTURE.md
+
+## 15) Phase 5 completion status (2026-04-14)
+
+Completed in this pass:
+1. Re-verified thesis user/developer chapters against current backend/frontend/rag code paths and runtime commands.
+2. Fixed final doc-to-code drifts:
+   - Chapter 2 password requirement now matches backend validation (min length 6).
+   - Chapter 3 path naming normalized to actual repository folder names.
+   - Chapter 3 MongoDB env section updated to document both `MONGO_URI` (backend) and `MONGO_URL` (rag) requirements.
+   - Chapter 3 Celery startup command updated to `fine_tune.celery_config.app` with `--pool=solo --concurrency=1`.
+   - Chapter 3 API table route paths corrected and `GET /api/index/stats` added.
+   - RAG README API section updated to include implemented `/api/ask` and `/api/index/stats` endpoints.
+   - Frontend generic axios client updated to use `REACT_APP_RAG_API_URL` env fallback.
+3. Recompiled thesis successfully after these fixes; output PDF produced and refreshed.
+4. Folder hygiene finalized in thesis template:
+   - Images organized under `assets/images/...`
+   - Logs and intermediate artifacts organized under `build/logs` and `build/intermediate`
+   - Added `.latexmkrc` so future builds keep root clean by default.
+
+Validation gate summary:
+1. Gate A (technical correctness): Pass for the verified endpoint/command/env/flow set documented above.
+2. Gate B (diagram correctness): Pass based on Phase 2 regeneration plus thesis image-path verification after folder reorganization.
+3. Gate C (thesis readiness): Pass for compile/reference/citation resolution.
+
+Residual non-blocking items:
+1. LaTeX formatting warnings remain (underfull/overfull boxes, float specifier warnings, and one `hypcap` caption warning), but they do not block build or affect functional doc/code alignment.
