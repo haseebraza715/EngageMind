@@ -3,8 +3,10 @@ import os
 import sys
 from functools import wraps
 
+from bson import ObjectId
 from dotenv import load_dotenv
 from flask import Flask, g, jsonify, request
+from flask_cors import CORS
 from flask_pymongo import PyMongo
 
 # Allow running as script: `python fine_tune/fine_tune_app.py`
@@ -25,6 +27,21 @@ _RAG_ROOT = os.path.dirname(_FINE_TUNE_DIR)
 load_dotenv(os.path.join(_RAG_ROOT, ".env"), override=False)
 
 app = Flask(__name__)
+
+cors_origins_env = os.getenv("CORS_ORIGINS", "http://localhost:3000")
+cors_origins = [origin.strip() for origin in cors_origins_env.split(",") if origin.strip()]
+
+CORS(
+    app,
+    resources={
+        r"/api/*": {
+            "origins": cors_origins,
+            "methods": ["GET", "POST", "OPTIONS"],
+            "allow_headers": ["Authorization", "Content-Type"],
+        }
+    },
+)
+
 mongo_uri = os.getenv("MONGO_URL", "mongodb://localhost:27017/demo_db")
 if "serverSelectionTimeoutMS" not in mongo_uri:
     joiner = "&" if "?" in mongo_uri else "?"
@@ -32,6 +49,19 @@ if "serverSelectionTimeoutMS" not in mongo_uri:
 app.config["MONGO_URI"] = mongo_uri
 mongo = PyMongo(app)
 db = mongo.db
+
+
+def _json_safe(value):
+    """Convert nested values to JSON-serializable primitives."""
+    if isinstance(value, ObjectId):
+        return str(value)
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe(v) for v in value]
+    if isinstance(value, (bytes, bytearray)):
+        return bytes(value).decode("utf-8", errors="ignore")
+    return value
 
 
 def login_required(f):
@@ -98,7 +128,7 @@ def _extract_training_texts(user_id: str):
 @login_required
 def start_fine_tune():
     """Start fine-tuning GPT-2 with LoRA for the authenticated user."""
-    user_id = g.user_id
+    user_id = str(g.user_id)
 
     try:
         dataset_texts = _extract_training_texts(user_id=user_id)
@@ -169,7 +199,7 @@ def check_fine_tune_status(task_id):
                     "status": "SUCCESS",
                     "state": "SUCCESS",
                     "message": "Fine-tuning completed successfully.",
-                    "result": task.result if isinstance(task.result, dict) else {"value": task.result},
+                    "result": _json_safe(task.result if isinstance(task.result, dict) else {"value": task.result}),
                 }
             )
         elif raw_state == "FAILURE":
@@ -192,7 +222,7 @@ def check_fine_tune_status(task_id):
                 }
             )
 
-        return jsonify(payload), 200
+        return jsonify(_json_safe(payload)), 200
 
     except Exception as e:
         logger.exception("[FINE-TUNE] Error checking task %s: %s", task_id, e)
