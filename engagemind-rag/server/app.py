@@ -181,7 +181,7 @@ def delete_thread(thread_id: str) -> None:
 # BUILD CONVERSATION GRAPH
 # ============================================================================
 
-skip_quality_checks = os.getenv("SKIP_QUALITY_CHECKS", "true").lower() == "true"
+skip_quality_checks = os.getenv("SKIP_QUALITY_CHECKS", "false").lower() == "true"
 conversation_graph = build_conversation_graph(
     api_key=api_key,
     retrieval_chain_factory=build_retrieval_chain,
