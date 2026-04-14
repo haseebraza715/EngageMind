@@ -3,15 +3,14 @@ Message handling and RAG pipeline orchestration.
 """
 
 import logging
-import os
 import time
 from typing import Any, Dict, Tuple
 
 from flask import jsonify
-from langchain_mistralai.chat_models import ChatMistralAI
 
 from rag.retrieval.no_docs_handler import generate_no_doc_response
 from rag.utils.conversation_manager import generate_conversation_title_from_context
+from rag.utils.llm_factory import create_chat_llm
 from rag.server.workflows.intent_router import route_user_query
 
 logger = logging.getLogger(__name__)
@@ -227,7 +226,7 @@ def handle_message(
         if should_update_title(convo, msg_count):
             new_title = generate_conversation_title_from_context(
                 all_messages,
-                llm=ChatMistralAI(mistral_api_key=api_key)
+                llm=create_chat_llm(mistral_api_key=api_key, purpose="title")
             )
             update_data["$set"]["title"] = new_title
             logger.info(f"[TITLE] Updated for {conversation_id}: {new_title}")
