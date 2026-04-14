@@ -6,6 +6,7 @@ from typing import List
 
 import pymongo
 import torch
+from bson import ObjectId
 from datasets import Dataset
 from peft import LoraConfig, get_peft_model
 from transformers import (
@@ -27,6 +28,19 @@ mongo_client = pymongo.MongoClient(mongo_url)
 db_name = mongo_url.rsplit("/", 1)[-1] or "demo_db"
 db = mongo_client[db_name]
 model_collection = db["models"]
+
+
+def _json_safe(value):
+    """Convert nested values to JSON-serializable primitives."""
+    if isinstance(value, ObjectId):
+        return str(value)
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe(v) for v in value]
+    if isinstance(value, (bytes, bytearray)):
+        return bytes(value).decode("utf-8", errors="ignore")
+    return value
 
 
 def _normalize_dataset_texts(dataset_texts: List[str]) -> List[str]:
@@ -135,9 +149,11 @@ def fine_tune_gpt2_lora(self, user_id: str, dataset_texts: list, output_dir: str
             "completed_at": completed_at,
         }
 
-        model_collection.insert_one(metadata)
+        insert_doc = dict(metadata)
+        insert_result = model_collection.insert_one(insert_doc)
+        metadata["model_id"] = str(insert_result.inserted_id)
         logger.info("[FINE-TUNE] Completed GPT-2 LoRA fine-tuning for user %s", user_id)
-        return metadata
+        return _json_safe(metadata)
 
     except Exception as e:
         logger.exception("[FINE-TUNE] Error during fine-tuning for user %s: %s", user_id, e)
