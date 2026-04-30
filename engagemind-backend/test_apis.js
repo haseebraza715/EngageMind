@@ -8,6 +8,7 @@
 const http = require('http');
 const https = require('https');
 const { URL } = require('url');
+const crypto = require('crypto');
 
 const BASE_URL = process.env.BACKEND_URL || 'http://localhost:5003';
 const TEST_TIMEOUT = 5000;
@@ -83,6 +84,10 @@ function makeRequest(method, path, data = null, headers = {}) {
     }
     req.end();
   });
+}
+
+function uniqueSuffix() {
+  return `${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
 }
 
 async function test(name, testFn) {
@@ -277,6 +282,118 @@ async function runTests() {
     }
   });
 
+  // Test 18: Full Local Auth Lifecycle
+  await test('Register, verify, login, profile, edit profile flow works', async () => {
+    const suffix = uniqueSuffix();
+    const username = `prod_user_${suffix}`;
+    const email = `prod_user_${suffix}@example.com`;
+    const password = 'production-pass-123';
+
+    const register = await makeRequest('POST', '/auth/register', {
+      username,
+      email,
+      password
+    });
+    if (register.status !== 201) {
+      throw new Error(`Register expected 201, got ${register.status}: ${register.rawBody}`);
+    }
+    if (!register.body.verificationToken) {
+      throw new Error('Registration did not return verification token for local demo flow');
+    }
+
+    const duplicate = await makeRequest('POST', '/auth/register', {
+      username,
+      email,
+      password
+    });
+    if (duplicate.status !== 400) {
+      throw new Error(`Duplicate registration expected 400, got ${duplicate.status}`);
+    }
+
+    const verify = await makeRequest('GET', `/auth/verify-email?token=${register.body.verificationToken}`);
+    if (verify.status !== 200) {
+      throw new Error(`Email verification expected 200, got ${verify.status}: ${verify.rawBody}`);
+    }
+
+    const badLogin = await makeRequest('POST', '/auth/login', {
+      emailOrUsername: email,
+      password: 'wrong-password'
+    });
+    if (badLogin.status !== 400) {
+      throw new Error(`Bad login expected 400, got ${badLogin.status}`);
+    }
+
+    const login = await makeRequest('POST', '/auth/login', {
+      emailOrUsername: email,
+      password
+    });
+    if (login.status !== 200 || !login.body.token) {
+      throw new Error(`Login expected token, got ${login.status}: ${login.rawBody}`);
+    }
+
+    const auth = { Authorization: `Bearer ${login.body.token}` };
+    const profile = await makeRequest('GET', '/auth/profile', null, auth);
+    if (profile.status !== 200 || profile.body.email !== email) {
+      throw new Error(`Profile expected current user, got ${profile.status}: ${profile.rawBody}`);
+    }
+    if (profile.body.verified !== true) {
+      throw new Error('Profile should reflect verified account after verification');
+    }
+
+    const updatedUsername = `prod_edit_${suffix}`;
+    const edit = await makeRequest('PUT', '/auth/edit-profile', {
+      username: updatedUsername,
+      bio: 'Integration test bio',
+      socialLinks: { github: 'https://github.com/example' }
+    }, auth);
+    if (edit.status !== 200 || edit.body.user.username !== updatedUsername) {
+      throw new Error(`Edit profile expected updated username, got ${edit.status}: ${edit.rawBody}`);
+    }
+
+    const protectedRoute = await makeRequest('GET', '/admin/protected', null, auth);
+    if (protectedRoute.status !== 200 || !protectedRoute.body.user) {
+      throw new Error(`Protected route expected user payload, got ${protectedRoute.status}`);
+    }
+
+    const adminData = await makeRequest('GET', '/admin/admin-data', null, auth);
+    if (adminData.status !== 403) {
+      throw new Error(`Non-admin admin-data expected 403, got ${adminData.status}`);
+    }
+  });
+
+  // Test 19: Password Reset Failure Path
+  await test('Password reset rejects invalid token', async () => {
+    const response = await makeRequest('POST', '/auth/reset-password', {
+      token: 'not-a-real-reset-token',
+      newPassword: 'new-production-pass-123'
+    });
+    if (response.status !== 400) {
+      throw new Error(`Expected 400 for invalid reset token, got ${response.status}`);
+    }
+  });
+
+  // Test 20: Verification Failure Path
+  await test('Email verification rejects invalid token', async () => {
+    const response = await makeRequest('GET', '/auth/verify-email?token=not-a-real-verification-token');
+    if (response.status !== 400) {
+      throw new Error(`Expected 400 for invalid verification token, got ${response.status}`);
+    }
+  });
+
+  // Test 21: Password Reset Privacy Path
+  await test('Forgot password does not leak unknown accounts', async () => {
+    const suffix = uniqueSuffix();
+    const response = await makeRequest('POST', '/auth/forgot-password', {
+      email: `missing_${suffix}@example.com`
+    });
+    if (response.status !== 200) {
+      throw new Error(`Expected 200 for unknown email privacy response, got ${response.status}`);
+    }
+    if (!response.body.message) {
+      throw new Error('Expected generic reset response message');
+    }
+  });
+
   // Summary
   log('\n' + '='.repeat(60), 'cyan');
   log('TEST SUMMARY', 'cyan');
@@ -324,4 +441,3 @@ runTests().catch((error) => {
   log(`\n❌ Test suite error: ${error.message}`, 'red');
   process.exit(1);
 });
-

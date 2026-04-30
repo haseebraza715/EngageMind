@@ -7,6 +7,7 @@ Default URL: `http://localhost:5003`
 
 ## Responsibilities
 - Register/login with JWT issuance.
+- Email verification and password reset flows.
 - Protected profile read/update.
 - Role-gated admin examples.
 - Consistent auth error responses.
@@ -34,7 +35,10 @@ Or start all services from root:
 
 ## API Contract (Key Endpoints)
 - `POST /auth/register`
+- `GET /auth/verify-email`
 - `POST /auth/login`
+- `GET /auth/google`
+- `GET /auth/google/callback`
 - `GET /auth/profile` (Bearer token)
 - `PUT /auth/edit-profile` (Bearer token)
 - `POST /auth/forgot-password`
