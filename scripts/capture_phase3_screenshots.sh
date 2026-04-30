@@ -3,10 +3,12 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 THESIS_DIR="$(cd "$ROOT_DIR/.." && pwd)/ELTE_FI_Thesis_Template"
+THESIS_SCREENSHOTS_DIR="$THESIS_DIR/assets/images/screenshots"
 TMP_DIR="$ROOT_DIR/.runtime-logs/screenshot-tmp"
 STATE_FILE="$TMP_DIR/storage-state.json"
 
 mkdir -p "$TMP_DIR"
+mkdir -p "$THESIS_SCREENSHOTS_DIR"
 
 if [[ -d "$ROOT_DIR/.local-node/bin" ]]; then
   export PATH="$ROOT_DIR/.local-node/bin:$PATH"
@@ -31,7 +33,7 @@ capture_public() {
     --viewport-size "1440,900" \
     --wait-for-timeout 1800 \
     --wait-for-selector "$selector" \
-    "$url" "$THESIS_DIR/$outfile"
+    "$url" "$THESIS_SCREENSHOTS_DIR/$outfile"
 }
 
 capture_auth_chat() {
@@ -43,19 +45,38 @@ capture_auth_chat() {
     --load-storage "$STATE_FILE" \
     --wait-for-timeout 3000 \
     --wait-for-selector "textarea[placeholder='Message EngageMind...']" \
-    "http://localhost:3000/chat" "$THESIS_DIR/$outfile"
+    "http://localhost:3000/chat" "$THESIS_SCREENSHOTS_DIR/$outfile"
 }
 
 echo "[1/6] Capturing public pages..."
-capture_public "http://localhost:3000" "landing_page.png" "text=Start Free Trial"
+capture_public "http://localhost:3000" "landing_page.png" "text=Create Account"
 capture_public "http://localhost:3000/register" "register.png" "text=Create an account"
 capture_public "http://localhost:3000/login" "login_main.png" "text=Welcome back"
 
 echo "[2/6] Creating temporary user and auth state..."
 TS="$(date +%s)"
-EMAIL="phase3.${TS}@example.com"
-USERNAME="phase3_${TS}"
+EMAIL="haseeb.raza.${TS}@example.com"
+USERNAME="Haseeb Raza"
 PASSWORD="Thesis123!"
+
+node - <<'NODE'
+const { MongoClient } = require(process.cwd() + '/engagemind-backend/node_modules/mongodb');
+
+(async () => {
+  const client = new MongoClient(process.env.MONGO_URI || 'mongodb://localhost:27017/engagemindbackend');
+  await client.connect();
+  await client.db().collection('users').deleteMany({
+    $or: [
+      { username: 'Haseeb Raza' },
+      { email: /^haseeb\.raza\./ },
+    ],
+  });
+  await client.close();
+})().catch((err) => {
+  console.error(err.message);
+  process.exit(1);
+});
+NODE
 
 REGISTER_PAYLOAD=$(node -e 'console.log(JSON.stringify({username: process.argv[1], email: process.argv[2], password: process.argv[3]}))' "$USERNAME" "$EMAIL" "$PASSWORD")
 REGISTER_RES=$(curl -sS -X POST "http://localhost:5003/auth/register" -H "Content-Type: application/json" -d "$REGISTER_PAYLOAD")
@@ -76,6 +97,12 @@ if [[ -z "$TOKEN" ]]; then
   echo "Error: login did not return token: $LOGIN_RES" >&2
   exit 1
 fi
+
+PROFILE_PAYLOAD=$(node -e 'console.log(JSON.stringify({bio: "Thesis demo user"}))')
+curl -sS -X PUT "http://localhost:5003/auth/edit-profile" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d "$PROFILE_PAYLOAD" >/dev/null || true
 
 cat > "$STATE_FILE" <<JSON
 {
@@ -100,15 +127,19 @@ if [[ -z "$CONV_ID" ]]; then
   exit 1
 fi
 
-DOC_PATH="$TMP_DIR/phase3_source_document.txt"
+DOC_PATH="$TMP_DIR/haseeb_raza_demo_source.txt"
 cat > "$DOC_PATH" <<'EOF'
-EngageMind thesis source document
+EngageMind demo source document for Haseeb Raza
 
 System architecture and responsibilities:
 - Frontend: React application on port 3000 for login, chat, upload, and training controls.
 - Auth backend: Node.js + Express service on port 5003 with JWT and Google OAuth support.
 - RAG API: Flask service on port 5001 for document upload, retrieval, and conversation handling.
 - Fine-tune API: Flask service on port 5002 with Celery worker + Redis queue for GPT-2 tasks.
+
+Demo user:
+- Name: Haseeb Raza.
+- Goal: test a clean thesis demo with realistic chat screenshots.
 
 Reliability and thesis-alignment challenges:
 1) Reliable ingestion and indexing of uploaded documents.
@@ -141,7 +172,7 @@ send_message() {
 }
 
 echo "[5/6] Capturing chat example states..."
-send_message "Summarize the uploaded document's architecture and component responsibilities in 3-4 sentences."
+send_message "Hi, I am Haseeb Raza. Summarize the uploaded document's architecture in 3-4 sentences."
 capture_auth_chat "chat_Example1.png"
 
 send_message "List the main reliability and thesis-alignment challenges from the document."
@@ -151,10 +182,10 @@ send_message "According to the uploaded document, who introduced the transformer
 capture_auth_chat "chat_Example3.png"
 
 echo "[6/6] Done. Updated screenshots:"
-echo "- $THESIS_DIR/landing_page.png"
-echo "- $THESIS_DIR/register.png"
-echo "- $THESIS_DIR/login_main.png"
-echo "- $THESIS_DIR/chat_interface.png"
-echo "- $THESIS_DIR/chat_Example1.png"
-echo "- $THESIS_DIR/chat_Example2.png"
-echo "- $THESIS_DIR/chat_Example3.png"
+echo "- $THESIS_SCREENSHOTS_DIR/landing_page.png"
+echo "- $THESIS_SCREENSHOTS_DIR/register.png"
+echo "- $THESIS_SCREENSHOTS_DIR/login_main.png"
+echo "- $THESIS_SCREENSHOTS_DIR/chat_interface.png"
+echo "- $THESIS_SCREENSHOTS_DIR/chat_Example1.png"
+echo "- $THESIS_SCREENSHOTS_DIR/chat_Example2.png"
+echo "- $THESIS_SCREENSHOTS_DIR/chat_Example3.png"

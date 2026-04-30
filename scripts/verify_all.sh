@@ -91,6 +91,7 @@ log "Running RAG API + phase1 tests"
 "${RAG_DIR}/.venv/bin/python" "${RAG_DIR}/test_apis.py"
 (
   cd "${RAG_DIR}"
+  "./.venv/bin/python" test_endpoint_contracts.py
   "./.venv/bin/python" test_phase1_simple.py
   "./.venv/bin/python" test_security_fixes.py
 )

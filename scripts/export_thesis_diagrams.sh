@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 SRC_DIR="$ROOT_DIR/docs/diagrams-src"
 OUT_DIR="$ROOT_DIR/docs/diagrams-export"
 THESIS_DIR="$(cd "$ROOT_DIR/.." && pwd)/ELTE_FI_Thesis_Template"
+THESIS_DIAGRAMS_DIR="$THESIS_DIR/assets/images/diagrams"
 
 if [[ -d "$ROOT_DIR/.local-node/bin" ]]; then
   export PATH="$ROOT_DIR/.local-node/bin:$PATH"
@@ -16,6 +17,7 @@ if ! command -v npx >/dev/null 2>&1; then
 fi
 
 mkdir -p "$OUT_DIR"
+mkdir -p "$THESIS_DIAGRAMS_DIR"
 
 render() {
   local input_file="$1"
@@ -35,8 +37,8 @@ render() {
 render "engagemind_architecture.mmd" "engagemind_architecture"
 render "engagemind_user_flow.mmd" "diagram"
 
-cp "$OUT_DIR/engagemind_architecture.png" "$THESIS_DIR/engagemind_architecture.png"
-cp "$OUT_DIR/diagram.png" "$THESIS_DIR/diagram.png"
+cp "$OUT_DIR/engagemind_architecture.png" "$THESIS_DIAGRAMS_DIR/engagemind_architecture.png"
+cp "$OUT_DIR/diagram.png" "$THESIS_DIAGRAMS_DIR/diagram.png"
 
 echo "Export completed."
 echo "- $OUT_DIR/engagemind_architecture.png"
@@ -44,5 +46,5 @@ echo "- $OUT_DIR/engagemind_architecture.svg"
 echo "- $OUT_DIR/diagram.png"
 echo "- $OUT_DIR/diagram.svg"
 echo "Synced thesis figures:"
-echo "- $THESIS_DIR/engagemind_architecture.png"
-echo "- $THESIS_DIR/diagram.png"
+echo "- $THESIS_DIAGRAMS_DIR/engagemind_architecture.png"
+echo "- $THESIS_DIAGRAMS_DIR/diagram.png (optional user-flow artifact; not currently included in thesis chapters)"

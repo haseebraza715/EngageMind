@@ -1,31 +1,56 @@
 %% EngageMind user interaction flow (source of truth)
 flowchart TB
-  START([Start]) --> FE[Open frontend :3000]
-  FE --> AUTH{Authenticated?}
+  START([Open app])
 
-  AUTH -->|No| REGISTER[Register]
-  REGISTER --> LOGIN[Login / OAuth]
-  AUTH -->|Yes| CHAT[Open chat workspace]
-  LOGIN --> CHAT
+  subgraph A["1. Access"]
+    direction LR
+    AUTH{Valid token?}
+    REG["Register / login"]
+    CHAT["Open chat"]
+    AUTH -->|No| REG --> CHAT
+    AUTH -->|Yes| CHAT
+  end
 
-  CHAT --> DOCQ{Upload document?}
-  DOCQ -->|Yes| INTAKE[Upload + ingest + index]
-  DOCQ -->|No| ASK[Send question]
-  INTAKE --> ASK
-  ASK --> RESP[Receive grounded answer]
+  subgraph B["2. Add context"]
+    direction LR
+    NEW["Select conversation"]
+    DOCS{Has documents?}
+    UPLOAD["Upload file"]
+    INDEX["Update FAISS index"]
+    NEW --> DOCS
+    DOCS -->|No| UPLOAD --> INDEX
+  end
 
-  CHAT --> FTQ{Start GPT-2 training?}
-  FTQ -->|Yes| FTASK[Submit fine-tune task]
-  FTASK --> FSTAT[Track status until completed]
-  FTQ -->|No| END([End])
+  subgraph C["3. Ask and remember"]
+    direction LR
+    ASK["Ask question"]
+    RAG["Retrieve + answer"]
+    SAVE["Save chat state"]
+    ASK --> RAG --> SAVE
+  end
 
-  RESP --> END
-  FSTAT --> END
+  subgraph D["4. Optional training"]
+    direction LR
+    TRAIN["Start GPT-2 LoRA job"]
+    STATUS["Poll status"]
+    TRAIN --> STATUS
+  end
 
-  classDef decision fill:#fee2e2,stroke:#b91c1c,color:#7f1d1d,stroke-width:1px;
-  classDef action fill:#e0f2fe,stroke:#0c4a6e,color:#082f49,stroke-width:1px;
-  classDef state fill:#dcfce7,stroke:#166534,color:#14532d,stroke-width:1px;
+  END([Done])
 
-  class AUTH,DOCQ,FTQ decision;
-  class FE,REGISTER,LOGIN,CHAT,INTAKE,ASK,RESP,FTASK,FSTAT action;
+  START --> AUTH
+  CHAT --> NEW
+  DOCS -->|Yes| ASK
+  INDEX --> ASK
+  SAVE -->|"follow-up"| ASK
+  SAVE -->|"train"| TRAIN
+  STATUS --> END
+  SAVE -->|"stop"| END
+
+  classDef state fill:#e0f2fe,stroke:#0369a1,color:#0c4a6e,stroke-width:1px;
+  classDef action fill:#dcfce7,stroke:#15803d,color:#14532d,stroke-width:1px;
+  classDef decision fill:#fef3c7,stroke:#b45309,color:#78350f,stroke-width:1px;
+
   class START,END state;
+  class REG,CHAT,NEW,UPLOAD,INDEX,ASK,RAG,SAVE,TRAIN,STATUS action;
+  class AUTH,DOCS decision;

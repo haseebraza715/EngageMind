@@ -1,45 +1,27 @@
-%% EngageMind system architecture (source of truth)
+%% EngageMind runtime architecture
 flowchart LR
-  %% Clients
-  U[User]
-  FE[React Frontend\n:3000]
+  User["User"] --> UI["React UI\n:3000"]
 
-  %% Services
-  BE[Auth Backend\nNode.js + Express\n:5003]
-  RAG[RAG API\nPython + Flask\n:5001]
-  FT[Fine-Tune API\nPython + Flask\n:5002]
-  CW[Celery Worker\nGPT-2 LoRA jobs]
+  UI --> Auth["Express Auth\n:5003"]
+  UI --> Rag["Flask RAG\n:5001"]
+  UI --> Tune["Flask Fine-Tune\n:5002"]
 
-  %% Stores and external systems
-  MDB[(MongoDB\n:27017)]
-  REDIS[(Redis\n:6379)]
-  FAISS[(FAISS Index\nper-user)]
-  MISTRAL[[Mistral API]]
-  TAVILY[[Tavily API]]
+  Auth --> Mongo[("MongoDB")]
+  Rag --> Mongo
+  Rag --> Faiss[("FAISS\nper-user indexes")]
 
-  U --> FE
-  FE -->|/auth/*| BE
-  FE -->|/api/conversation/*\n/api/upload| RAG
-  FE -->|/api/fine-tune*| FT
+  Tune --> Mongo
+  Tune --> Redis[("Redis")]
+  Redis --> Worker["Celery\nGPT-2 LoRA worker"]
+  Worker --> Adapter[("LoRA adapters\nper user")]
+  Tune --> Adapter
 
-  BE --> MDB
+  classDef ui fill:#e0f2fe,stroke:#0369a1,color:#0c4a6e;
+  classDef svc fill:#dcfce7,stroke:#15803d,color:#14532d;
+  classDef data fill:#fef3c7,stroke:#b45309,color:#78350f;
+  classDef worker fill:#fee2e2,stroke:#b91c1c,color:#7f1d1d;
 
-  RAG --> MDB
-  RAG --> FAISS
-  RAG --> MISTRAL
-  RAG --> TAVILY
-
-  FT --> MDB
-  FT --> REDIS
-  REDIS --> CW
-  CW --> MDB
-
-  classDef client fill:#dbeafe,stroke:#1d4ed8,color:#1e3a8a,stroke-width:1px;
-  classDef svc fill:#dcfce7,stroke:#166534,color:#14532d,stroke-width:1px;
-  classDef data fill:#fef3c7,stroke:#92400e,color:#78350f,stroke-width:1px;
-  classDef ext fill:#f3e8ff,stroke:#6b21a8,color:#581c87,stroke-width:1px;
-
-  class U,FE client;
-  class BE,RAG,FT,CW svc;
-  class MDB,REDIS,FAISS data;
-  class MISTRAL,TAVILY ext;
+  class User,UI ui;
+  class Auth,Rag,Tune svc;
+  class Mongo,Faiss,Redis,Adapter data;
+  class Worker worker;
