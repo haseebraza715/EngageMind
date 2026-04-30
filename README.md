@@ -1,14 +1,15 @@
 # EngageMind
 
-EngageMind is a local multi-service app for authenticated chat, document-grounded RAG, and GPT-2 LoRA fine-tuning.
+EngageMind is an AI study assistant built around a learner's own material. It combines document-grounded RAG with per-user GPT-2 LoRA fine-tuning, so the same chat interface can answer from uploaded content and later use a user-trained adapter.
 
-## What It Does
+## Core Features
 
-- Registers and authenticates users through the Express backend.
-- Stores user profiles, uploaded documents, conversations, and training metadata in MongoDB.
-- Lets a user upload readable source files and ask grounded questions through the RAG API.
-- Queues GPT-2 LoRA fine-tuning through Redis and Celery.
-- Lets the chat UI switch between RAG mode and GPT-2 LoRA mode when a trained adapter exists.
+- Email-based registration, login, JWT auth, and protected user routes.
+- Document upload and grounded chat through a Flask RAG API.
+- Per-user FAISS indexes for uploaded learning material.
+- GPT-2 LoRA fine-tuning jobs handled through Redis and Celery.
+- Chat mode switching between RAG and a trained GPT-2 LoRA adapter.
+- MongoDB persistence for users, documents, conversations, and training metadata.
 
 ## Repository Structure
 
@@ -17,7 +18,7 @@ EngageMind/
 ├── engagemind-frontend/   React UI for auth, chat, upload, and training controls
 ├── engagemind-backend/    Express API for auth, profile, email verification, and roles
 ├── engagemind-rag/        Flask RAG API, fine-tune API, Celery worker, and Python tests
-├── docs/                  Diagrams and screenshots
+├── docs/                  Documentation assets
 ├── scripts/               Local run and verification scripts
 ├── README.md              This runbook
 └── ARCHITECTURE.md        System overview and service flow
@@ -94,7 +95,7 @@ Expected local services:
 
 Logs are written under `.runtime-logs/`.
 
-## Manual Run
+## Run Services Manually
 
 ```bash
 # terminal 1
@@ -131,7 +132,7 @@ npm start
 6. Wait for `SUCCESS`, then switch the chat header from `RAG` to `GPT-2 LoRA`.
 7. Send a message to the trained adapter.
 
-RAG mode is the default for grounded document QA. GPT-2 LoRA mode is for demonstrating personalized model adaptation.
+RAG mode is for grounded document QA. GPT-2 LoRA mode is for testing the user-trained model adapter.
 
 ## Verify
 
@@ -144,7 +145,7 @@ This runs backend API tests, frontend tests/build, RAG endpoint contracts, fine-
 ## More Documentation
 
 - [ARCHITECTURE.md](./ARCHITECTURE.md) - concise system architecture.
-- [docs/README.md](./docs/README.md) - diagrams and screenshots.
+- [docs/README.md](./docs/README.md) - documentation assets.
 - [engagemind-frontend/README.md](./engagemind-frontend/README.md) - frontend details.
 - [engagemind-backend/README.md](./engagemind-backend/README.md) - auth backend details.
 - [engagemind-rag/README.md](./engagemind-rag/README.md) - RAG and fine-tune details.
