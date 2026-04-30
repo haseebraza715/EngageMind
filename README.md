@@ -2,8 +2,6 @@
 
 EngageMind is a local multi-service app for authenticated chat, document-grounded RAG, and GPT-2 LoRA fine-tuning.
 
-<img src="./docs/screenshots/landing_page.png" alt="EngageMind landing page" width="780" />
-
 ## What It Does
 
 - Registers and authenticates users through the Express backend.
