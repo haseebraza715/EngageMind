@@ -1,75 +1,95 @@
-# EngageMind Architecture
+# Architecture
 
-## System Summary
-EngageMind is a multi-service local system with clear ownership boundaries:
-- Frontend renders auth, chat, upload, and training status.
-- Backend handles authentication and user account data.
-- RAG API handles retrieval, grounded answer generation, and conversation persistence.
-- Fine-tune API manages GPT-2 LoRA task submission and status polling.
+EngageMind is split into four local services. The split is intentional: authentication, chat retrieval, model training, and the browser UI can be checked separately.
 
-## Runtime Topology
+## Services
+
+| Service | Port | Main path | Job |
+|---|---:|---|---|
+| Frontend | `3000` | `engagemind-frontend/` | React UI for login, chat, upload, training status, and mode switching |
+| Auth backend | `5003` | `engagemind-backend/` | Express API for users, JWTs, email verification, password reset, and roles |
+| RAG API | `5001` | `engagemind-rag/main.py` | Flask API for upload, retrieval, conversations, and grounded answers |
+| Fine-tune API | `5002` | `engagemind-rag/fine_tune/fine_tune_app.py` | Flask API for GPT-2 LoRA training jobs, status, adapter checks, and LoRA chat |
+| Worker | n/a | `engagemind-rag/fine_tune/tasks/` | Celery worker that trains GPT-2 LoRA adapters |
+
+## Runtime Diagram
+
 ```mermaid
-flowchart LR
-  FE["Frontend :3000"]
-  BE["Backend API :5003"]
-  RAG["RAG API :5001"]
-  FT["Fine-tune API :5002"]
-  MDB[("MongoDB :27017")]
-  REDIS[("Redis :6379")]
-  CELERY["Celery Worker"]
+flowchart TB
+  Browser["Browser / React UI"]
+  Auth["Express Auth API"]
+  Rag["Flask RAG API"]
+  Tune["Flask Fine-Tune API"]
+  Worker["Celery Worker"]
+  Mongo[("MongoDB")]
+  Redis[("Redis")]
+  Faiss[("FAISS indexes")]
+  Adapter[("GPT-2 LoRA adapters")]
 
-  FE --> BE
-  FE --> RAG
-  FE --> FT
-  BE --> MDB
-  RAG --> MDB
-  FT --> MDB
-  FT --> REDIS
-  REDIS --> CELERY
-  CELERY --> MDB
+  Browser -->|"register/login/profile"| Auth
+  Browser -->|"conversations/upload/messages"| Rag
+  Browser -->|"train/status/model/chat"| Tune
+
+  Auth --> Mongo
+  Rag --> Mongo
+  Rag --> Faiss
+  Tune --> Mongo
+  Tune --> Redis
+  Redis --> Worker
+  Worker --> Mongo
+  Worker --> Adapter
+  Tune --> Adapter
 ```
 
-## Core Request Flows
-```mermaid
-sequenceDiagram
-  participant U as User
-  participant FE as Frontend
-  participant BE as Backend
-  participant R as RAG API
-  participant F as Fine-tune API
-  participant C as Celery Worker
+## Main Flows
 
-  U->>FE: Login with Google or credentials
-  FE->>BE: /auth/*
-  BE-->>FE: JWT
+### Authentication
 
-  U->>FE: Ask question / upload documents
-  FE->>R: /api/upload and /api/conversation/*
-  R-->>FE: Grounded answer + citations
+1. Frontend sends register/login requests to the Express backend.
+2. Backend stores users in MongoDB and returns a JWT after login.
+3. Frontend stores the token in `localStorage`.
+4. RAG and fine-tune APIs validate the same token using the same `JWT_SECRET`.
 
-  U->>FE: Start training
-  FE->>F: POST /api/fine-tune
-  F->>C: enqueue training task
-  FE->>F: GET /api/fine-tune/status/:task_id
-  F-->>FE: PENDING / PROGRESS / SUCCESS / FAILURE
+### RAG Chat
+
+1. User uploads a document.
+2. RAG API stores file metadata/content in MongoDB.
+3. The ingestion pipeline chunks and embeds text.
+4. FAISS stores a per-user vector index.
+5. On chat, the RAG pipeline retrieves relevant chunks and generates a grounded answer.
+6. Conversation messages are stored in MongoDB.
+
+### GPT-2 LoRA Training and Chat
+
+1. User starts training from the sidebar.
+2. Fine-tune API builds a corpus from the user's uploaded documents.
+3. Celery queues the training task through Redis.
+4. Worker trains GPT-2 with LoRA and saves artifacts under:
+
+```text
+engagemind-rag/models/<user_id>/gpt2-lora/
 ```
 
-## Prompt and Quality Layer (RAG)
-- Prompt stack includes answer generation, rewrite, relevance/hallucination grading, and no-doc handling.
-- Quality checks are enabled by default to reduce bad responses.
-- Responses that fail quality criteria are tracked through structured logs for triage.
+5. Frontend polls the task status.
+6. After success, frontend enables `GPT-2 LoRA` mode.
+7. Fine-tune chat loads the user's adapter and stores the exchange in MongoDB.
 
-## Failure Domains
-- MongoDB unavailable:
-  - Backend auth/user lookup can fail.
-  - RAG/fine-tune persistence is unavailable.
-- Redis/Celery unavailable:
-  - Fine-tune jobs cannot execute.
-- Model provider issues (quota/rate limits/network):
-  - RAG may return fallback errors.
-  - Retry/fallback behavior should be monitored in logs.
+## Data Boundaries
 
-## Operational Notes
-- `scripts/run_all.sh` starts all services and reports dependency readiness.
-- `.runtime-logs/` contains service logs (`backend.log`, `rag.log`, `fine-tune.log`, `celery.log`).
-- Keep provider and auth configuration aligned across services.
+User-owned data is always keyed by `user_id`:
+
+- conversations in `chats`
+- uploaded documents in `documents`
+- conversation memory in `conversation_states`
+- fine-tune metadata in `models`
+- FAISS indexes under per-user folders
+- LoRA adapters under per-user folders
+
+RAG is the default mode for document-grounded answers. GPT-2 LoRA mode is available only when the signed-in user has a completed adapter.
+
+## Failure Handling
+
+- MongoDB down: auth, chat persistence, uploads, and training metadata fail with controlled errors.
+- Redis down: fine-tune jobs cannot run, but RAG chat can still work.
+- Missing adapter: GPT-2 LoRA mode stays disabled or returns an unavailable response.
+- No uploaded documents: RAG chat returns guidance instead of pretending to know the answer.
