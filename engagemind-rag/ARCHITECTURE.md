@@ -14,7 +14,9 @@ This module implements:
 - Fine-tune API (`fine_tune/fine_tune_app.py`, port `5002`)
   - corpus build,
   - training task queueing,
-  - status/result serialization.
+  - status/result serialization,
+  - LoRA adapter artifact saving,
+  - adapter availability checks and GPT-2 LoRA chat inference.
 
 ## Component Diagram
 ```mermaid
@@ -84,6 +86,10 @@ sequenceDiagram
   Q->>CW: Execute GPT-2 LoRA training
   CW-->>FT: Task state + result metadata
   FT-->>FE: PENDING/PROGRESS/SUCCESS/FAILURE
+
+  FE->>FT: GET /api/fine-tune/model
+  FE->>FT: POST /api/fine-tune/chat
+  FT-->>FE: GPT-2 LoRA response or UNAVAILABLE
 ```
 
 ## Reliability Notes
@@ -96,3 +102,4 @@ sequenceDiagram
 - If auth-related errors appear across services, verify matching `JWT_SECRET` values between backend and RAG env files.
 - RAG conversation/upload and fine-tune endpoints are authentication-protected; missing/invalid tokens should fail fast.
 - If a user has no uploaded documents, the no-doc handler returns guided responses instead of ungrounded claims.
+- Fine-tuned GPT-2 LoRA artifacts are used by the GPT-2 LoRA chat mode; RAG chat remains a separate, grounded path.

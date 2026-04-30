@@ -1,6 +1,7 @@
 import logging
 import os
 import sys
+import time
 from functools import wraps
 
 from bson import ObjectId
@@ -14,6 +15,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fine_tune.celery_config import app as celery_app
+from fine_tune.inference import check_adapter_availability, generate_lora_response
 from fine_tune.tasks.tasks import fine_tune_gpt2_lora
 from rag.ingestion.ingestion_pipeline import process_binary_content, process_text_content
 from rag.server.security import verify_api_token
@@ -122,6 +124,39 @@ def _extract_training_texts(user_id: str):
             dataset_texts.append(extracted_doc.page_content.strip())
 
     return dataset_texts
+
+
+def _append_gpt2_lora_messages(user_id: str, conversation_id: str, user_msg: str, assistant_msg: str, model_id: str):
+    timestamp = int(time.time())
+    assistant_ts = int(time.time())
+
+    db.chats.update_one(
+        {"conversation_id": conversation_id, "user_id": user_id},
+        {
+            "$push": {
+                "messages": {
+                    "$each": [
+                        {
+                            "sender": "user",
+                            "text": user_msg,
+                            "timestamp": timestamp,
+                            "provider": "gpt2-lora",
+                            "model_id": model_id,
+                        },
+                        {
+                            "sender": "assistant",
+                            "text": assistant_msg,
+                            "timestamp": assistant_ts,
+                            "provider": "gpt2-lora",
+                            "model_id": model_id,
+                        },
+                    ]
+                }
+            },
+            "$set": {"updated_at": assistant_ts},
+        },
+        upsert=False,
+    )
 
 
 @app.route("/api/fine-tune", methods=["POST"])
@@ -235,6 +270,82 @@ def check_fine_tune_status(task_id):
                 "error": str(e),
             }
         ), 500
+
+
+@app.route("/api/fine-tune/model", methods=["GET"])
+@login_required
+def get_fine_tune_model():
+    user_id = str(g.user_id)
+    status = check_adapter_availability(user_id, db)
+    status["status"] = "AVAILABLE" if status.get("available") else "UNAVAILABLE"
+    return jsonify(_json_safe(status)), 200
+
+
+@app.route("/api/fine-tune/chat", methods=["POST"])
+@login_required
+def fine_tune_chat():
+    user_id = str(g.user_id)
+    data = request.get_json(force=True, silent=True) or {}
+    message = (data.get("message") or "").strip()
+    conversation_id = (data.get("conversation_id") or "").strip() or None
+
+    if not message:
+        return jsonify({"status": "FAILURE", "message": "Message is required."}), 400
+
+    if conversation_id:
+        convo = db.chats.find_one({"conversation_id": conversation_id, "user_id": user_id})
+        if not convo:
+            return jsonify({"status": "FAILURE", "message": "Conversation not found."}), 404
+
+    availability = check_adapter_availability(user_id, db)
+    if not availability.get("available"):
+        return (
+            jsonify(
+                {
+                    "status": "UNAVAILABLE",
+                    "message": availability.get("reason")
+                    or "No GPT-2 LoRA adapter is available for this user.",
+                }
+            ),
+            404,
+        )
+
+    try:
+        answer, meta = generate_lora_response(user_id, message, db, status=availability)
+    except Exception as e:
+        logger.exception("[FINE-TUNE] Failed to generate response for user %s: %s", user_id, e)
+        return (
+            jsonify(
+                {
+                    "status": "FAILURE",
+                    "message": "Failed to generate GPT-2 LoRA response.",
+                }
+            ),
+            500,
+        )
+
+    if conversation_id:
+        try:
+            _append_gpt2_lora_messages(
+                user_id=user_id,
+                conversation_id=conversation_id,
+                user_msg=message,
+                assistant_msg=answer,
+                model_id=meta.get("model_id"),
+            )
+        except Exception as e:
+            logger.exception(
+                "[FINE-TUNE] Failed to persist GPT-2 LoRA chat for user %s: %s", user_id, e
+            )
+
+    return jsonify(
+        {
+            "answer": answer,
+            "provider": "gpt2-lora",
+            "model_id": meta.get("model_id"),
+            "status": "SUCCESS",
+        }
+    ), 200
 
 
 if __name__ == "__main__":

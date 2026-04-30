@@ -11,13 +11,15 @@ Together they provide document-grounded chat, conversation persistence, and GPT-
 ### RAG API
 - Conversation CRUD per authenticated user.
 - Message handling with retrieval-augmented context.
-- Document ingestion/upload pipeline.
+- Document ingestion/upload pipeline for `.txt`, `.md`, `.pdf`, and `.docx` files up to 10 MB.
 - Prompt quality gating and bad-response triage logging.
+- Controlled no-document responses when a user asks before uploading source material.
 
 ### Fine-Tune API
 - Build user corpus from uploaded documents.
 - Queue GPT-2 LoRA training task.
 - Return deterministic status payloads for frontend polling.
+- Save adapter artifacts and metadata, expose adapter availability, and serve GPT-2 LoRA chat inference for the authenticated user.
 
 ## Required Environment
 ### Core
@@ -92,12 +94,16 @@ celery -A fine_tune.celery_config.app worker --pool=solo --concurrency=1 --logle
 ### Fine-Tune
 - `POST /api/fine-tune`
 - `GET /api/fine-tune/status/<task_id>`
+- `GET /api/fine-tune/model`
+- `POST /api/fine-tune/chat`
 
 Status values:
 - `PENDING`
 - `PROGRESS`
 - `SUCCESS`
 - `FAILURE`
+
+Fine-tune output is written to `models/<user_id>/gpt2-lora/` and task metadata is stored in MongoDB. After completion, GPT-2 LoRA chat mode serves responses from the saved adapter, while RAG remains the default for grounded document QA. When no adapter exists, the fine-tune chat endpoint returns an unavailable response.
 
 ## Prompt Benchmark (Fixed 20 Queries)
 Run benchmark with identical data/tokens for baseline and candidate:
@@ -122,6 +128,9 @@ Benchmark case files:
   - MongoDB unavailable.
 - Fine-tune stuck or failing:
   - Verify Redis and Celery worker are running.
+- Fine-tune succeeds but GPT-2 LoRA mode is unavailable:
+  - Check `/api/fine-tune/model` to confirm adapter availability and verify the adapter directory under `models/<user_id>/gpt2-lora/`.
+  - RAG remains the default mode for grounded document QA.
 - OpenRouter errors:
   - Verify API key, model id, and `CHAT_PROVIDER=openrouter`.
 
