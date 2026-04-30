@@ -5,7 +5,7 @@ React client for thesis-critical user flows:
 - authenticated access,
 - per-user chat and memory continuity,
 - document upload for RAG,
-- GPT-2 fine-tune start and live status polling.
+- GPT-2 fine-tune start, model availability checks, and GPT-2 LoRA chat mode.
 
 Default URL: `http://localhost:3000`
 
@@ -13,7 +13,7 @@ Default URL: `http://localhost:3000`
 - Manage auth token lifecycle in UI (`localStorage` token).
 - Call backend auth APIs (`/auth/*`).
 - Call RAG APIs for conversations/upload.
-- Call fine-tune APIs for training start/status.
+- Call fine-tune APIs for training start/status, adapter availability, and GPT-2 LoRA chat.
 - Present controlled success/error states for demo stability.
 
 ## Required Environment
@@ -36,12 +36,15 @@ Or start all services from root:
 ```
 
 ## Thesis Demo Flow
-1. Register or log in.
+1. Register and complete the verification token flow, or log in.
 2. Open chat and create/send messages.
 3. Refresh and verify conversation memory persists.
-4. Upload a document.
-5. Trigger GPT-2 fine-tuning from sidebar.
+4. Upload a readable document (`.txt`, `.md`, `.pdf`, or `.docx`, max 10 MB).
+5. Trigger GPT-2 LoRA fine-tuning from sidebar.
 6. Observe status updates (`PENDING` -> `PROGRESS` -> terminal state).
+7. Switch to `GPT-2 LoRA` mode and send a message using the trained adapter.
+
+The sidebar reports fine-tune task progress and completion. Chat defaults to RAG for grounded answers, but users can switch to `GPT-2 LoRA` mode once an adapter is available.
 
 ## Verification
 ```bash

@@ -7,6 +7,7 @@ import {
   fetchConversations,
   deleteConversation,
   fetchFineTuneStatus,
+  fetchFineTuneModelStatus,
   startFineTuneTraining,
 } from "./chatApi";
 import { FiMenu, FiMessageSquare, FiTrendingUp, FiCpu } from "react-icons/fi";
@@ -25,6 +26,32 @@ export default function ChatContainer({ userData }) {
   const [trainingStatus, setTrainingStatus] = useState('IDLE');
   const [trainingMessage, setTrainingMessage] = useState('No training task has been started yet.');
   const [trainingActionLoading, setTrainingActionLoading] = useState(false);
+  const [chatMode, setChatMode] = useState('rag');
+  const [fineTuneAvailable, setFineTuneAvailable] = useState(false);
+  const [fineTuneModelStatus, setFineTuneModelStatus] = useState(null);
+  const [fineTuneStatusLoading, setFineTuneStatusLoading] = useState(false);
+
+  const refreshFineTuneAvailability = async () => {
+    try {
+      setFineTuneStatusLoading(true);
+      const data = await fetchFineTuneModelStatus();
+      const available = Boolean(data?.available);
+      setFineTuneAvailable(available);
+      setFineTuneModelStatus(data || null);
+
+      if (!available && chatMode === 'gpt2-lora') {
+        setChatMode('rag');
+      }
+    } catch (error) {
+      setFineTuneAvailable(false);
+      setFineTuneModelStatus(null);
+      if (chatMode === 'gpt2-lora') {
+        setChatMode('rag');
+      }
+    } finally {
+      setFineTuneStatusLoading(false);
+    }
+  };
 
   useEffect(() => {
     const loadConversations = async () => {
@@ -53,6 +80,7 @@ export default function ChatContainer({ userData }) {
     };
 
     loadConversations();
+    refreshFineTuneAvailability();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -181,6 +209,7 @@ export default function ChatContainer({ userData }) {
         if (nextStatus === 'SUCCESS') {
           toast.success('GPT-2 fine-tuning completed successfully.');
           setTrainingTaskId(null);
+          refreshFineTuneAvailability();
           return;
         }
 
@@ -264,6 +293,11 @@ export default function ChatContainer({ userData }) {
             conversationId={activeConversationId}
             userData={userData}
             onShowUploader={handleShowUploader}
+            chatMode={chatMode}
+            onModeChange={setChatMode}
+            fineTuneAvailable={fineTuneAvailable}
+            fineTuneStatusLoading={fineTuneStatusLoading}
+            fineTuneModelStatus={fineTuneModelStatus}
           />
         ) : (
           <div className="flex flex-col items-center justify-center h-full p-8 text-center">

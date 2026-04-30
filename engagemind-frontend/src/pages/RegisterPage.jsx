@@ -81,18 +81,17 @@ export default function RegisterPage() {
 
           <div className="space-y-6">
             <h1 className="text-5xl font-bold text-white leading-tight">
-              Join the future of <br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-white via-white/90 to-white/70">AI Communication</span>
+              Start a clean <br />
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-white via-white/90 to-white/70">EngageMind account</span>
             </h1>
             <p className="text-lg text-neutral-200 max-w-md">
-              Create an account today and start building smarter, context-aware conversational experiences.
+              Use one account for chat history, document upload, RAG answers, and GPT-2 LoRA training.
             </p>
           </div>
 
           <div className="flex gap-4 text-sm text-neutral-300">
-            <span>© {new Date().getFullYear()} EngageMind AI</span>
-            <span>Privacy Policy</span>
-            <span>Terms</span>
+            <span>© {new Date().getFullYear()} EngageMind</span>
+            <span>Local thesis prototype</span>
           </div>
         </div>
       </div>
@@ -111,7 +110,7 @@ export default function RegisterPage() {
         >
           <div className="space-y-2 text-center lg:text-left">
             <h2 className="text-3xl font-bold text-neutral-900 dark:text-white">Create an account</h2>
-            <p className="text-neutral-500 dark:text-neutral-400">Join our community of developers and innovators.</p>
+            <p className="text-neutral-500 dark:text-neutral-400">Create a local user for the thesis demo flow.</p>
           </div>
 
           <div className="space-y-4">

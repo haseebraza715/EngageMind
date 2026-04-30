@@ -4,7 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import { FiRefreshCw, FiSend, FiPaperclip, FiCopy, FiCheck, FiArrowLeft } from 'react-icons/fi';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { fetchConversationMessages, sendMessage } from './chatApi';
+import { fetchConversationMessages, sendFineTuneMessage, sendMessage } from './chatApi';
 import Avatar from '../UI/Avatar';
 import Button from '../UI/Button';
 import { Textarea } from '../UI/Input';
@@ -13,7 +13,16 @@ import { cn } from '../../lib/utils';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 
-export default function ChatWindow({ conversationId, userData, onShowUploader }) {
+export default function ChatWindow({
+  conversationId,
+  userData,
+  onShowUploader,
+  chatMode = 'rag',
+  onModeChange,
+  fineTuneAvailable = false,
+  fineTuneStatusLoading = false,
+  fineTuneModelStatus = null,
+}) {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -57,7 +66,8 @@ export default function ChatWindow({ conversationId, userData, onShowUploader })
     setIsTyping(true);
 
     try {
-      const response = await sendMessage(conversationId, userMessage.text);
+      const sendFn = chatMode === 'gpt2-lora' ? sendFineTuneMessage : sendMessage;
+      const response = await sendFn(conversationId, userMessage.text);
       setMessages((prev) => [
         ...prev,
         {
@@ -67,10 +77,11 @@ export default function ChatWindow({ conversationId, userData, onShowUploader })
         },
       ]);
     } catch (err) {
+      const fallbackMessage = err?.message || "I'm sorry, I couldn't reach the server. Please check your connection.";
       // Revert optimism if needed or show error
       setMessages(prev => [...prev, {
         sender: 'assistant',
-        text: "I'm sorry, I couldn't reach the server. Please check your connection.",
+        text: fallbackMessage,
         timestamp: Math.floor(Date.now() / 1000),
         error: true
       }]);
@@ -78,6 +89,11 @@ export default function ChatWindow({ conversationId, userData, onShowUploader })
       setIsTyping(false);
     }
   };
+
+  const gpt2Disabled = !fineTuneAvailable || fineTuneStatusLoading;
+  const gpt2Tooltip = fineTuneStatusLoading
+    ? 'Checking GPT-2 LoRA availability...'
+    : (fineTuneModelStatus?.reason || 'Train a GPT-2 LoRA adapter to enable this mode.');
 
   const CopyButton = ({ text }) => {
     const [copied, setCopied] = useState(false);
@@ -123,6 +139,36 @@ export default function ChatWindow({ conversationId, userData, onShowUploader })
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 rounded-full bg-neutral-100/80 dark:bg-white/5 border border-neutral-200/60 dark:border-white/10 p-1 text-[11px] font-semibold">
+            <button
+              onClick={() => onModeChange && onModeChange('rag')}
+              className={cn(
+                "px-2.5 py-1 rounded-full transition-colors",
+                chatMode === 'rag'
+                  ? "bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white shadow-sm"
+                  : "text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200"
+              )}
+            >
+              RAG
+            </button>
+            <Tooltip content={gpt2Disabled ? gpt2Tooltip : 'Use your GPT-2 LoRA adapter'}>
+              <span>
+                <button
+                  onClick={() => onModeChange && onModeChange('gpt2-lora')}
+                  disabled={gpt2Disabled}
+                  className={cn(
+                    "px-2.5 py-1 rounded-full transition-colors",
+                    chatMode === 'gpt2-lora'
+                      ? "bg-white dark:bg-neutral-800 text-neutral-900 dark:text-white shadow-sm"
+                      : "text-neutral-500 dark:text-neutral-400 hover:text-neutral-800 dark:hover:text-neutral-200",
+                    gpt2Disabled && "opacity-60 cursor-not-allowed"
+                  )}
+                >
+                  GPT-2 LoRA
+                </button>
+              </span>
+            </Tooltip>
+          </div>
           <Tooltip content="Refresh">
             <Button size="sm" variant="ghost" icon onClick={loadMessages} loading={loading}>
               <FiRefreshCw size={16} />

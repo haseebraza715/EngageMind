@@ -5,7 +5,7 @@ The frontend provides the user-facing thesis flow:
 - authentication,
 - chat with memory continuity,
 - document upload,
-- GPT-2 training trigger and status monitoring.
+- GPT-2 training trigger, status monitoring, and GPT-2 LoRA chat mode.
 
 ## Main Structure
 - `src/pages/*`: route-level auth/profile screens (login, register, profile, reset flows).
@@ -49,6 +49,7 @@ sequenceDiagram
   U->>FE: Chat + upload + train
   FE->>R: /api/conversation + /api/upload
   FE->>F: /api/fine-tune + /api/fine-tune/status/:task_id
+  FE->>F: /api/fine-tune/model + /api/fine-tune/chat
 ```
 
 ## Design Notes

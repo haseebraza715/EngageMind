@@ -50,6 +50,7 @@ export default function Navbar() {
 
   const handleLogout = () => {
     localStorage.removeItem('token');
+    window.dispatchEvent(new Event('auth-state-change'));
     setIsLoggedIn(false);
     navigate('/login');
   };

@@ -160,3 +160,46 @@ export async function fetchFineTuneStatus(taskId) {
     throw new Error(error.response?.data?.message || 'Failed to fetch training status');
   }
 }
+
+export async function fetchFineTuneModelStatus() {
+  try {
+    const response = await axiosFineTune.get('/api/fine-tune/model');
+    return response.data;
+  } catch (error) {
+    console.error('Error fetching fine-tune model status:', error);
+
+    if (error.response?.status === 401) {
+      window.location.href = '/login';
+      throw new Error('Authentication required. Please log in to check model status.');
+    }
+
+    throw new Error(error.response?.data?.message || 'Failed to fetch fine-tune model status');
+  }
+}
+
+export async function sendFineTuneMessage(conversationId, message) {
+  try {
+    if (conversationId.startsWith('local_')) {
+      throw new Error('Authentication required. Please log in to use chat features.');
+    }
+
+    const response = await axiosFineTune.post('/api/fine-tune/chat', {
+      message,
+      conversation_id: conversationId,
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Error sending fine-tune message:', error);
+
+    if (error.response?.status === 401) {
+      window.location.href = '/login';
+      throw new Error('Authentication required. Please log in to use GPT-2 LoRA chat.');
+    }
+
+    if (error.response?.status === 404) {
+      throw new Error(error.response?.data?.message || 'GPT-2 LoRA adapter unavailable.');
+    }
+
+    throw new Error(error.response?.data?.message || 'Failed to send GPT-2 LoRA message');
+  }
+}

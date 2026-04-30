@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 
 import { FiPlus, FiTrash2, FiMessageSquare, FiSearch, FiCpu } from 'react-icons/fi';
+import Avatar from '../UI/Avatar';
 import Button from '../UI/Button';
 import Input from '../UI/Input';
 import { cn } from '../../lib/utils';
@@ -195,9 +196,7 @@ export default function Sidebar({
       <div className="p-4 border-t border-white/20 dark:border-white/5 bg-white/30 dark:bg-black/20 backdrop-blur-lg">
         <div className="flex items-center justify-between gap-3">
           <a href="/profile" className="flex items-center gap-2 text-sm font-medium text-neutral-600 dark:text-neutral-300 hover:text-primary-500 transition-colors">
-            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-500 to-teal-500 flex items-center justify-center text-white text-xs font-bold">
-              {(userData?.username || 'U').charAt(0).toUpperCase()}
-            </div>
+            <Avatar name={userData?.username || 'Guest'} src={userData?.avatar} size="sm" />
             <span className="truncate max-w-[120px]">{userData?.username || 'Guest'}</span>
           </a>
           <div className="flex items-center gap-1.5 text-xs text-neutral-500">

@@ -28,6 +28,7 @@ export default function LoginPage() {
 
       const { token, message } = response.data;
       localStorage.setItem('token', token);
+      window.dispatchEvent(new Event('auth-state-change'));
 
       toast.success(message || 'Welcome back!');
       navigate('/chat');
@@ -62,18 +63,17 @@ export default function LoginPage() {
 
           <div className="space-y-6">
             <h1 className="text-5xl font-bold text-white leading-tight">
-              Unlock the power of <br />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-white via-white/90 to-white/70">Intelligent AI</span>
+              Return to your <br />
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-white via-white/90 to-white/70">thesis workspace</span>
             </h1>
             <p className="text-lg text-neutral-200 max-w-md">
-              Join thousands of developers and professionals who use EngageMind to accelerate their workflow and unlock creativity.
+              Continue a saved conversation, upload source material, or test the GPT-2 LoRA chat mode.
             </p>
           </div>
 
           <div className="flex gap-4 text-sm text-neutral-300">
-            <span>© {new Date().getFullYear()} EngageMind AI</span>
-            <span>Privacy Policy</span>
-            <span>Terms</span>
+            <span>© {new Date().getFullYear()} EngageMind</span>
+            <span>Local thesis prototype</span>
           </div>
         </div>
       </div>

@@ -94,6 +94,15 @@ async function runTests() {
     if (!content.includes('localhost:5001')) throw new Error('RAG server URL should be localhost:5001');
   });
 
+  test('axiosFineTune.js exists', () => {
+    const file = path.join(srcPath, 'api', 'axiosFineTune.js');
+    if (!fs.existsSync(file)) throw new Error('axiosFineTune.js not found');
+    const content = fs.readFileSync(file, 'utf8');
+    if (!content.includes('baseURL')) throw new Error('Missing baseURL configuration');
+    if (!content.includes('localhost:5002')) throw new Error('Fine-tune server URL should be localhost:5002');
+    if (!content.includes('Authorization')) throw new Error('Fine-tune API client should attach Authorization header');
+  });
+
   // Test 3: Pages
   log('\n📄 Pages:', 'blue');
   const pages = [
@@ -201,6 +210,103 @@ async function runTests() {
     if (!content.includes('axiosChat')) throw new Error('chatApi not using axiosChat');
   });
 
+  test('chatApi wires every RAG endpoint used by chat flow', () => {
+    const file = path.join(srcPath, 'components', 'Chat', 'chatApi.jsx');
+    const content = fs.readFileSync(file, 'utf8');
+    [
+      '/api/conversations',
+      '/api/conversation',
+      '/api/upload',
+      '/message'
+    ].forEach(endpoint => {
+      if (!content.includes(endpoint)) {
+        throw new Error(`chatApi missing ${endpoint}`);
+      }
+    });
+  });
+
+  test('chatApi wires fine-tune start and status endpoints', () => {
+    const file = path.join(srcPath, 'components', 'Chat', 'chatApi.jsx');
+    const content = fs.readFileSync(file, 'utf8');
+    if (!content.includes('axiosFineTune')) throw new Error('chatApi not using axiosFineTune');
+    if (!content.includes('/api/fine-tune')) throw new Error('Missing fine-tune start endpoint');
+    if (!content.includes('/api/fine-tune/status/')) throw new Error('Missing fine-tune status endpoint');
+    if (!content.includes('/api/fine-tune/model')) throw new Error('Missing fine-tune model endpoint');
+    if (!content.includes('/api/fine-tune/chat')) throw new Error('Missing fine-tune chat endpoint');
+    if (!content.includes('startFineTuneTraining')) throw new Error('Missing startFineTuneTraining export');
+    if (!content.includes('fetchFineTuneStatus')) throw new Error('Missing fetchFineTuneStatus export');
+    if (!content.includes('fetchFineTuneModelStatus')) throw new Error('Missing fetchFineTuneModelStatus export');
+    if (!content.includes('sendFineTuneMessage')) throw new Error('Missing sendFineTuneMessage export');
+  });
+
+  test('ChatContainer polls training status and handles terminal states', () => {
+    const file = path.join(srcPath, 'components', 'Chat', 'ChatContainer.jsx');
+    const content = fs.readFileSync(file, 'utf8');
+    if (!content.includes('setInterval(pollStatus')) throw new Error('Training status is not polled');
+    ['PENDING', 'PROGRESS', 'SUCCESS', 'FAILURE'].forEach(status => {
+      if (!content.includes(status)) throw new Error(`Missing training status ${status}`);
+    });
+    if (!content.includes('setTrainingTaskId(null)')) {
+      throw new Error('Terminal training states should clear task id');
+    }
+  });
+
+  test('ChatWindow sends messages and supports document upload entry point', () => {
+    const file = path.join(srcPath, 'components', 'Chat', 'ChatWindow.jsx');
+    const content = fs.readFileSync(file, 'utf8');
+    if (!content.includes('sendMessage')) throw new Error('ChatWindow does not import or route to sendMessage');
+    if (!content.includes('sendFn(conversationId')) throw new Error('ChatWindow does not send through selected chat provider');
+    if (!content.includes('sendFineTuneMessage')) throw new Error('ChatWindow does not call sendFineTuneMessage');
+    if (!content.includes('GPT-2 LoRA')) throw new Error('ChatWindow missing GPT-2 LoRA mode label');
+    if (!content.includes('onShowUploader')) throw new Error('ChatWindow missing upload entry point');
+    if (!content.includes('fetchConversationMessages')) throw new Error('ChatWindow does not load persisted messages');
+  });
+
+  test('DocumentUploader uses multipart upload and shows controlled errors', () => {
+    const file = path.join(srcPath, 'components', 'Chat', 'DocumentUploader.jsx');
+    const content = fs.readFileSync(file, 'utf8');
+    if (!content.includes("'/api/upload'")) throw new Error('DocumentUploader missing upload endpoint');
+    if (!content.includes('multipart/form-data')) throw new Error('DocumentUploader missing multipart upload');
+    if (!content.includes('setError')) throw new Error('DocumentUploader should render controlled errors');
+  });
+
+  test('Avatar falls back to initials when image fails', () => {
+    const file = path.join(srcPath, 'components', 'UI', 'Avatar.jsx');
+    const content = fs.readFileSync(file, 'utf8');
+    if (!content.includes('imageFailed')) throw new Error('Avatar missing failed-image state');
+    if (!content.includes('onError={() => setImageFailed(true)}')) {
+      throw new Error('Avatar image should switch to initials on load failure');
+    }
+    if (!content.includes('overflow-hidden')) {
+      throw new Error('Avatar should hide any overflowing image/text content');
+    }
+  });
+
+  test('Home and footer hide auth prompts after login', () => {
+    const homeFile = path.join(srcPath, 'pages', 'Homepage.jsx');
+    const footerFile = path.join(srcPath, 'components', 'Footer.jsx');
+    const navbarFile = path.join(srcPath, 'components', 'Navbar.jsx');
+    const home = fs.readFileSync(homeFile, 'utf8');
+    const footer = fs.readFileSync(footerFile, 'utf8');
+    const navbar = fs.readFileSync(navbarFile, 'utf8');
+
+    if (!home.includes('isAuthenticated ?')) {
+      throw new Error('Homepage should branch on authenticated state');
+    }
+    if (!home.includes('View Profile')) {
+      throw new Error('Homepage should show profile action for logged-in users');
+    }
+    if (!footer.includes('isAuthenticated ?')) {
+      throw new Error('Footer should branch on authenticated state');
+    }
+    if (!footer.includes('Profile')) {
+      throw new Error('Footer should show Profile instead of auth prompts when logged in');
+    }
+    if (!footer.includes('auth-state-change') || !navbar.includes('auth-state-change')) {
+      throw new Error('Auth state changes should sync between navbar/footer');
+    }
+  });
+
   // Test 8: Navigation Fixes
   log('\n🧭 Navigation:', 'blue');
   test('LoginPage navigates to /chat (not /dashboard)', () => {
@@ -277,4 +383,3 @@ runTests().catch((error) => {
   log(`\n❌ Test suite error: ${error.message}`, 'red');
   process.exit(1);
 });
-

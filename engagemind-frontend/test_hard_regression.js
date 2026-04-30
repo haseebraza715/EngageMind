@@ -57,6 +57,12 @@ run('Chat API exposes fine-tune start and status methods', () => {
   if (!content.includes('fetchFineTuneStatus')) {
     throw new Error('fetchFineTuneStatus function missing');
   }
+  if (!content.includes('fetchFineTuneModelStatus')) {
+    throw new Error('fetchFineTuneModelStatus function missing');
+  }
+  if (!content.includes('sendFineTuneMessage')) {
+    throw new Error('sendFineTuneMessage function missing');
+  }
 });
 
 run('Chat container integrates training start + polling', () => {
