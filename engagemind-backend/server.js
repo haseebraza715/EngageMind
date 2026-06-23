@@ -37,7 +37,7 @@ const app = express();
 
 const sessionSecret = process.env.SESSION_SECRET || process.env.JWT_SECRET;
 if (!sessionSecret) {
-  console.warn('⚠️  SESSION_SECRET and JWT_SECRET are not set. Using development-only fallback secret.');
+  console.warn('SESSION_SECRET and JWT_SECRET are not set. Using development-only fallback secret.');
 }
 
 // CORS configuration - allow all origins for development
@@ -87,15 +87,15 @@ const startServer = async () => {
   let connection = await connectDB();
 
   while (!connection) {
-    console.warn('⚠️  Waiting for MongoDB before starting HTTP server...');
+    console.warn(' Waiting for MongoDB before starting HTTP server...');
     await delay(3000);
     connection = await connectDB();
   }
 
   app.listen(PORT, () => {
-    console.log(`✅ Server listening on port ${PORT}`);
-    console.log(`✅ API available at http://localhost:${PORT}`);
-    console.log(`✅ Registration endpoint: http://localhost:${PORT}/auth/register`);
+    console.log(`Server listening on port ${PORT}`);
+    console.log(`API available at http://localhost:${PORT}`);
+    console.log(`Registration endpoint: http://localhost:${PORT}/auth/register`);
   });
 };
 
