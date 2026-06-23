@@ -18,6 +18,19 @@ const ensureDbConnection = async () => {
   return Boolean(connection) && mongoose.connection.readyState === 1;
 };
 
+const buildUniqueUsername = async (displayName, email) => {
+  const base = (displayName || email.split('@')[0] || 'user').trim();
+  let candidate = base;
+  let suffix = 1;
+
+  while (await User.findOne({ username: candidate })) {
+    candidate = `${base} ${suffix}`;
+    suffix += 1;
+  }
+
+  return candidate;
+};
+
 // Only configure Google Strategy if credentials are provided
 if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
   try {
@@ -32,18 +45,21 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
           return done(null, false, { code: 'DB_UNAVAILABLE' });
         }
 
-        const email = profile.emails[0].value;
+        const email = profile.emails[0].value.trim().toLowerCase();
         const existingUser = await User.findOne({ email });
 
         if (existingUser) return done(null, existingUser);
 
+        const username = await buildUniqueUsername(profile.displayName, email);
+
         const newUser = new User({
-          username: profile.displayName,
+          username,
           email,
           provider: 'google',
+          googleId: profile.id,
           verified: true,
           role: 'user',
-          avatar: profile.photos[0].value,
+          avatar: profile.photos?.[0]?.value || '',
         });
 
         await newUser.save();
@@ -57,12 +73,12 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
         return done(err, null);
       }
     }));
-    console.log('✅ Google OAuth strategy registered successfully');
+    console.log('Google OAuth strategy registered successfully');
   } catch (error) {
-    console.error('❌ Error registering Google OAuth strategy:', error);
+    console.error('Error registering Google OAuth strategy:', error);
   }
 } else {
-  console.warn('⚠️  Google OAuth not configured - GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET not set');
+  console.warn(' Google OAuth not configured - GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET not set');
 }
 
 passport.serializeUser((user, done) => {

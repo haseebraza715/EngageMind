@@ -278,12 +278,26 @@ router.put('/edit-profile', authMiddleware, async (req, res) => {
 
     if (!requireDbConnection(res)) return;
 
+    const currentUser = await User.findById(userId);
+    if (!currentUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
     const updates = {};
 
-    if (username) {
-      const existing = await User.findOne({ username, _id: { $ne: userId } });
-      if (existing) return res.status(400).json({ error: 'Username already taken' });
-      updates.username = username;
+    if (username !== undefined && username !== null) {
+      const trimmedUsername = String(username).trim();
+      if (!trimmedUsername) {
+        return res.status(400).json({ error: 'Username cannot be empty' });
+      }
+
+      if (trimmedUsername !== currentUser.username) {
+        const existing = await User.findOne({ username: trimmedUsername });
+        if (existing) {
+          return res.status(400).json({ error: 'Username already taken' });
+        }
+        updates.username = trimmedUsername;
+      }
     }
 
     if (bio !== undefined) updates.bio = bio;
@@ -295,6 +309,10 @@ router.put('/edit-profile', authMiddleware, async (req, res) => {
       { $set: updates },
       { new: true, runValidators: true }
     ).select('-password -verificationToken -verificationTokenExpires -passwordResetToken -passwordResetExpires');
+
+    if (!updatedUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
 
     res.json({
       message: 'Profile updated successfully',
@@ -310,6 +328,7 @@ router.put('/edit-profile', authMiddleware, async (req, res) => {
       }
     });
   } catch (error) {
+    console.error('Edit profile error:', error);
     res.status(500).json({ error: 'Failed to update profile' });
   }
 });

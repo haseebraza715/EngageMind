@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { toast } from 'react-toastify';
 import { FiUser, FiTwitter, FiGithub, FiLinkedin, FiSave, FiCheck } from 'react-icons/fi';
 import axiosAuth from '../api/axiosAuth';
 import Card from '../components/UI/Card';
 import Input, { Textarea } from '../components/UI/Input';
 import Button from '../components/UI/Button';
 import Avatar from '../components/UI/Avatar';
+import { useToast } from '../components/UI/Toast';
 
 const avatarOptions = [
   'rocket', 'wizard', 'cat', 'robot', 'ninja', 'astronaut',
@@ -15,6 +15,7 @@ const avatarOptions = [
 
 function EditProfile() {
   const navigate = useNavigate();
+  const toast = useToast();
   const [formData, setFormData] = useState({
     username: '',
     bio: '',
@@ -23,6 +24,7 @@ function EditProfile() {
   });
 
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -59,12 +61,36 @@ function EditProfile() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (saving) return;
+
+    setSaving(true);
     try {
-      await axiosAuth.put('/auth/edit-profile', formData);
+      const payload = {
+        username: formData.username.trim(),
+        bio: formData.bio,
+        avatar: formData.avatar,
+        socialLinks: formData.socialLinks,
+      };
+
+      const res = await axiosAuth.put('/auth/edit-profile', payload);
+      const updatedUser = res.data?.user;
+
+      if (updatedUser) {
+        setFormData({
+          username: updatedUser.username || '',
+          bio: updatedUser.bio || '',
+          avatar: updatedUser.avatar || '',
+          socialLinks: updatedUser.socialLinks || { twitter: '', linkedin: '', github: '' },
+        });
+      }
+
       toast.success('Profile updated successfully!');
-      setTimeout(() => navigate('/profile'), 1000);
+      navigate('/profile');
     } catch (err) {
-      toast.error('Failed to update profile');
+      const message = err.response?.data?.error || err.response?.data?.message || 'Failed to update profile';
+      toast.error(message);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -80,12 +106,14 @@ function EditProfile() {
             <p className="text-neutral-500 text-sm mt-1">Update your personal information and public profile.</p>
           </div>
           <div className="flex gap-3">
-            <Button variant="ghost" onClick={() => navigate('/profile')}>Cancel</Button>
-            <Button variant="primary" icon={<FiSave />} onClick={handleSubmit}>Save Changes</Button>
+            <Button variant="ghost" onClick={() => navigate('/profile')} disabled={saving}>Cancel</Button>
+            <Button type="submit" form="edit-profile-form" variant="primary" leftIcon={<FiSave />} loading={saving} disabled={saving}>
+              Save Changes
+            </Button>
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-8">
+        <form id="edit-profile-form" onSubmit={handleSubmit} className="space-y-8">
 
           {/* Avatar Section */}
           <Card className="p-6">
@@ -171,7 +199,7 @@ function EditProfile() {
           </Card>
 
           <div className="flex justify-end pt-4 pb-20">
-            <Button type="submit" variant="primary" size="lg" icon={<FiCheck />}>
+            <Button type="submit" variant="primary" size="lg" leftIcon={<FiCheck />} loading={saving} disabled={saving}>
               Save Changes
             </Button>
           </div>
