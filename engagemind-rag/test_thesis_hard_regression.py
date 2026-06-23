@@ -278,7 +278,43 @@ def test_capability_query_routes_to_chitchat():
     intent, response = detect_intent("how can you help me?")
     assert intent == "chitchat"
     assert isinstance(response, str)
-    assert "uploaded documents" in response.lower()
+    assert "upload" in response.lower()
+
+
+def test_what_do_you_know_routes_to_capabilities():
+    intent, response = detect_intent("what do you know?")
+    assert intent == "chitchat"
+    assert isinstance(response, str)
+    assert "upload" in response.lower()
+    assert "source:" not in response.lower()
+
+
+def test_vague_summary_after_capability_answer_clarifies_target():
+    history = [
+        {
+            "sender": "assistant",
+            "text": "I know the content you upload into this workspace. I can summarize uploaded documents, answer questions from them, extract key facts, compare sections, and point to supporting evidence when document context is available.",
+        }
+    ]
+    intent, response = detect_intent("yeah can you summarize it for me", history)
+    assert intent == "chitchat"
+    assert isinstance(response, str)
+    assert "uploaded document" in response.lower()
+    assert "source:" not in response.lower()
+
+
+def test_vague_summary_after_old_bad_capability_answer_clarifies_target():
+    history = [
+        {
+            "sender": "assistant",
+            "text": "Direct answer: I can summarize uploaded documents, answer questions from them, extract key facts, compare sections, and point to supporting evidence when document context is available.",
+        }
+    ]
+    intent, response = detect_intent("summarize it for me", history)
+    assert intent == "chitchat"
+    assert isinstance(response, str)
+    assert "uploaded document" in response.lower()
+    assert "source:" not in response.lower()
 
 
 def test_capability_plus_task_stays_document_query():
@@ -287,10 +323,41 @@ def test_capability_plus_task_stays_document_query():
     assert response is None
 
 
+def test_explicit_uploaded_document_summary_stays_document_query_after_capability():
+    history = [
+        {
+            "sender": "assistant",
+            "text": "I know the content you upload into this workspace. I can summarize uploaded documents, answer questions from them, extract key facts, compare sections, and point to supporting evidence when document context is available.",
+        }
+    ]
+    intent, response = detect_intent("summarize the uploaded document", history)
+    assert intent == "document_query"
+    assert response is None
+
+
+def test_what_do_you_know_about_topic_stays_document_query():
+    intent, response = detect_intent("What do you know about design patterns?")
+    assert intent == "document_query"
+    assert response is None
+
+
 def test_colloquial_greeting_routes_to_chitchat():
     intent, response = detect_intent("yo what up")
     assert intent == "chitchat"
     assert isinstance(response, str)
+
+
+def test_casual_greeting_with_address_routes_to_chitchat():
+    intent, response = detect_intent("hey what is up g")
+    assert intent == "chitchat"
+    assert isinstance(response, str)
+    assert "source:" not in response.lower()
+
+
+def test_greeting_plus_real_question_stays_document_query():
+    intent, response = detect_intent("hey what is polymorphism?")
+    assert intent == "document_query"
+    assert response is None
 
 
 def test_conversation_crud_contract():
@@ -345,8 +412,15 @@ def run_all_tests():
         ("Message validation paths", test_handle_message_validation_paths),
         ("Chitchat route bypasses RAG", test_chitchat_route_bypasses_rag_pipeline),
         ("Capability query routes to chitchat", test_capability_query_routes_to_chitchat),
+        ("What do you know routes to capabilities", test_what_do_you_know_routes_to_capabilities),
+        ("Vague summary after capability clarifies target", test_vague_summary_after_capability_answer_clarifies_target),
+        ("Vague summary after old bad capability answer clarifies target", test_vague_summary_after_old_bad_capability_answer_clarifies_target),
         ("Capability with task stays document query", test_capability_plus_task_stays_document_query),
+        ("Explicit uploaded document summary stays document query", test_explicit_uploaded_document_summary_stays_document_query_after_capability),
+        ("What do you know about topic stays document query", test_what_do_you_know_about_topic_stays_document_query),
         ("Colloquial greeting routes to chitchat", test_colloquial_greeting_routes_to_chitchat),
+        ("Casual greeting with address routes to chitchat", test_casual_greeting_with_address_routes_to_chitchat),
+        ("Greeting plus real question stays document query", test_greeting_plus_real_question_stays_document_query),
         ("Conversation CRUD contract", test_conversation_crud_contract),
         ("Upload handler txt success contract", test_upload_handler_success_txt_contract),
     ]

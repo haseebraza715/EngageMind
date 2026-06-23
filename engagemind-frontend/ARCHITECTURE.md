@@ -1,58 +1,41 @@
 # Frontend Architecture
 
-## Purpose
-The frontend provides the user-facing thesis flow:
-- authentication,
-- chat with memory continuity,
-- document upload,
-- GPT-2 training trigger, status monitoring, and GPT-2 LoRA chat mode.
+## Overview
+The frontend is a React single-page app for the EngageMind thesis prototype. It handles login, profile pages, document upload, RAG chat, and GPT-2 LoRA fine-tuning controls.
 
-## Main Structure
-- `src/pages/*`: route-level auth/profile screens (login, register, profile, reset flows).
-- `src/components/Chat/*`: chat route UI (chat page/container, message view, upload, training panel).
-- `src/components/UI/*`: shared reusable interface primitives.
-- `src/api/*`: Axios clients for backend auth, RAG API, and fine-tune API.
-- `src/services/*`: request orchestration and helper services.
-- `src/constants/*`: API URLs, feature constants, and shared settings.
-- `src/App.js`: route mapping and protected flow entry.
+The browser does not run AI models. It calls local backend services and stores the JWT in `localStorage`.
 
-## Runtime Integration
+## Main Files
+- `src/App.js`: routes and protected pages.
+- `src/pages/*`: login, register, profile, edit profile, verification, reset pages.
+- `src/components/Chat/*`: chat UI, sidebar, message window, uploader, training controls.
+- `src/components/Chat/chatApi.jsx`: active chat/fine-tune API wrapper.
+- `src/api/axiosAuth.js`: auth backend client.
+- `src/api/axiosChat.js`: RAG backend client.
+- `src/api/axiosFineTune.js`: fine-tune backend client.
+
+## Service Flow
 ```mermaid
 flowchart LR
-  UI["React UI"]
-  AUTH["Auth Client (axiosAuth)"]
-  CHAT["RAG Client (axiosChat/chatApi)"]
-  FT["Fine-tune Client (axiosFineTune/chatApi)"]
-  LS["localStorage token"]
+  U["User"] --> FE["React frontend<br/>localhost:3000"]
+  FE --> AUTH["Express auth API<br/>localhost:5003"]
+  FE --> RAG["Flask RAG API<br/>localhost:5001"]
+  FE --> FT["Flask fine-tune API<br/>localhost:5002"]
 
-  UI --> LS
-  UI --> AUTH
-  UI --> CHAT
-  UI --> FT
-  AUTH --> BE["Backend API :5003"]
-  CHAT --> RAG["RAG API :5001"]
-  FT --> FTA["Fine-tune API :5002"]
+  AUTH --> JWT["JWT login/profile"]
+  RAG --> CHAT["Conversations, upload, RAG answers"]
+  FT --> TRAIN["GPT-2 LoRA training/status/chat"]
 ```
 
-## Request Flow
-```mermaid
-sequenceDiagram
-  participant U as User
-  participant FE as Frontend
-  participant BE as Backend
-  participant R as RAG API
-  participant F as Fine-tune API
+## Key Flows
+- Login/register calls the auth backend and stores the returned JWT.
+- Protected pages use the JWT to access chat and profile features.
+- Document upload goes to the RAG API.
+- Normal chat uses RAG mode by default.
+- `Start Fine-Tuning` queues a background GPT-2 LoRA job through the fine-tune API.
+- GPT-2 LoRA chat mode is enabled only after a user-specific adapter is available.
 
-  U->>FE: Login
-  FE->>BE: /auth/login
-  BE-->>FE: JWT
-  U->>FE: Chat + upload + train
-  FE->>R: /api/conversation + /api/upload
-  FE->>F: /api/fine-tune + /api/fine-tune/status/:task_id
-  FE->>F: /api/fine-tune/model + /api/fine-tune/chat
-```
-
-## Design Notes
-- JWT token is the single auth source for all API calls.
-- UI surfaces controlled errors to avoid demo-breaking crashes.
-- `axiosChat` and `axiosFineTune` enforce token presence and redirect to login on `401`.
+## Demo Notes
+- Use RAG for reliable document-grounded answers.
+- Use fine-tuning as an optional personalization feature.
+- Redis and the Celery worker must be running before showing `Start Fine-Tuning`.

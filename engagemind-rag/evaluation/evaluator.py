@@ -58,14 +58,79 @@ _chitchat_regex = [re.compile(p, re.IGNORECASE) for p in CHITCHAT_PATTERNS]
 # Meta capability/help queries that should NOT trigger document-grounded answer formatting.
 _CAPABILITY_QUERY_PATTERNS = [
     re.compile(r'^\s*(what can you do|what do you do)\s*[\?!.]*\s*$', re.IGNORECASE),
+    re.compile(r'^\s*(what do you know|what information do you have|what have you learned)\s*[\?!.]*\s*$', re.IGNORECASE),
     re.compile(r'^\s*(how can you help( me)?|can you help( me)?)\s*[\?!.]*\s*$', re.IGNORECASE),
-    re.compile(r'^\s*(how do you work|what are your capabilities)\s*[\?!.]*\s*$', re.IGNORECASE),
+    re.compile(r'^\s*(how do you work|what are your capabilities|what are you trained on)\s*[\?!.]*\s*$', re.IGNORECASE),
 ]
 
 # Fuzzy match patterns for typo tolerance
 _FUZZY_GREETINGS = ["hi", "hello", "hey", "hola"]
 _FUZZY_THANKS = ["thanks", "thank you", "thx"]
 _FUZZY_ACKNOWLEDGMENTS = ["no problem", "np", "no worries", "ok", "okay"]
+
+_GREETING_OPENERS = {"hi", "hello", "hey", "yo", "heya", "howdy", "sup", "wassup"}
+_CASUAL_ADDRESS_TERMS = {"g", "bro", "bruh", "man", "mate", "dude"}
+_CASUAL_UP_PHRASES = [
+    re.compile(r"^(?:hey|hi|hello|yo|heya|howdy)?\s*(?:what'?s|whats|what is|what)\s+up(?:\s+(?:g|bro|bruh|man|mate|dude))?$"),
+    re.compile(r"^(?:hey|hi|hello|yo|heya|howdy)\s+(?:sup|wassup)(?:\s+(?:g|bro|bruh|man|mate|dude))?$"),
+    re.compile(r"^(?:sup|wassup)(?:\s+(?:g|bro|bruh|man|mate|dude))?$"),
+]
+_SUMMARY_FOLLOWUP_PATTERN = re.compile(
+    r"\b(summarize|summary|sum up|recap|explain)\b.*\b(it|that|this|them)\b"
+)
+
+
+def _normalize_social_text(text: str) -> str:
+    """Normalize punctuation and spacing for small-talk intent checks."""
+    normalized = re.sub(r"[^a-z0-9'\s]", " ", text.lower())
+    return re.sub(r"\s+", " ", normalized).strip()
+
+
+def _is_casual_greeting(message: str) -> bool:
+    """Detect greeting-only slang without catching real document questions."""
+    normalized = _normalize_social_text(message)
+    if not normalized:
+        return False
+
+    for pattern in _CASUAL_UP_PHRASES:
+        if pattern.match(normalized):
+            return True
+
+    tokens = normalized.split()
+    if len(tokens) <= 3 and tokens[0] in _GREETING_OPENERS:
+        return all(token in _GREETING_OPENERS or token in _CASUAL_ADDRESS_TERMS for token in tokens)
+
+    return False
+
+
+def _last_assistant_message(conversation_history: Optional[List[Dict[str, Any]]]) -> str:
+    """Return the latest assistant text from prior conversation history."""
+    if not conversation_history:
+        return ""
+    for item in reversed(conversation_history):
+        if item.get("sender") == "assistant":
+            return str(item.get("text", ""))
+    return ""
+
+
+def _is_capability_response(text: str) -> bool:
+    """Detect EngageMind's own capability/help answer."""
+    normalized = _normalize_social_text(text)
+    return (
+        "i know the content you upload into this workspace" in normalized
+        or "i can help you understand your uploaded documents" in normalized
+        or "i'm here to help you explore and understand your documents" in normalized
+        or (
+            "i can summarize uploaded documents" in normalized
+            and "point to supporting evidence" in normalized
+        )
+    )
+
+
+def _is_vague_summary_followup(message: str) -> bool:
+    """Detect pronoun-based summary requests that need a clear target."""
+    normalized = _normalize_social_text(message)
+    return bool(_SUMMARY_FOLLOWUP_PATTERN.search(normalized))
 
 # Import better greeting responses
 try:
@@ -98,7 +163,8 @@ CHITCHAT_RESPONSES = {
         "Anytime you need help!"
     ],
     "how_are_you": "I'm doing well, thank you for asking! I'm here to help you explore and understand your documents. What would you like to know?",
-    "capabilities": "I can help you understand your uploaded documents: summarize them, answer specific questions, extract key facts, compare sections, and find evidence-backed details.",
+    "capabilities": "I know the content you upload into this workspace. I can summarize uploaded documents, answer questions from them, extract key facts, compare sections, and point to supporting evidence when document context is available.",
+    "clarify_summary_target": "Sure. If you mean an uploaded document, ask me to summarize the uploaded document or tell me the filename or section. Then I can summarize that content and point to evidence.",
     "default": "I'm here to help you with questions about your uploaded documents. What would you like to know?"
 }
 
@@ -121,6 +187,16 @@ def detect_intent(message: str, conversation_history: Optional[List[Dict[str, An
     # Check if it's empty
     if not message:
         return ("chitchat", CHITCHAT_RESPONSES["default"])
+
+    if _is_casual_greeting(message):
+        if any(phrase in _normalize_social_text(message) for phrase in ["what up", "what is up", "whats up", "what's up", "sup", "wassup"]):
+            return ("chitchat", CHITCHAT_RESPONSES["how_are_you"])
+        greeting = _get_greeting_response(has_documents=True)
+        return ("chitchat", greeting)
+
+    last_assistant = _last_assistant_message(conversation_history)
+    if _is_capability_response(last_assistant) and _is_vague_summary_followup(message):
+        return ("chitchat", CHITCHAT_RESPONSES["clarify_summary_target"])
 
     # Capability/meta-help queries should get conversational response, not RAG formatting.
     for pattern in _CAPABILITY_QUERY_PATTERNS:
